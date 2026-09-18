@@ -328,6 +328,20 @@ export async function updateSantriStatus(
   await updateSantri(id, { status_santri: status });
 }
 
+function formatDbError(errMessage: string): string {
+  if (
+    errMessage.toLowerCase().includes('row-level security') ||
+    errMessage.toLowerCase().includes('violates row-level security policy')
+  ) {
+    return 'Izin database diblokir oleh Row-Level Security Supabase. Silakan jalankan skrip fix_rls.sql di Supabase SQL Editor (tersedia di menu Pengaturan > Supabase).';
+  }
+  return errMessage;
+}
+
+function isValidUuid(val?: string | null): boolean {
+  return Boolean(val && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(val));
+}
+
 export async function createSantri(
   input: Omit<Santri, 'id' | 'created_at' | 'updated_at'>
 ): Promise<{ data: Santri | null; error: string | null }> {
@@ -345,8 +359,8 @@ export async function createSantri(
             nama: input.nama.trim(),
             nis: input.nis?.trim() || null,
             jenis_kelamin: input.jenis_kelamin,
-            kelas_id: input.kelas_id || null,
-            kamar_id: input.kamar_id || null,
+            kelas_id: isValidUuid(input.kelas_id) ? input.kelas_id : null,
+            kamar_id: isValidUuid(input.kamar_id) ? input.kamar_id : null,
             rayon: input.rayon?.trim() || null,
             status_santri: input.status_santri,
             barcode_value: cleanBarcode,
@@ -363,12 +377,12 @@ export async function createSantri(
         .single();
 
       if (error) {
-        return { data: null, error: error.message };
+        return { data: null, error: formatDbError(error.message) };
       }
       return { data: data as Santri, error: null };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menyimpan santri ke database';
-      return { data: null, error: msg };
+      return { data: null, error: formatDbError(msg) };
     }
   }
 
@@ -397,22 +411,29 @@ export async function updateSantri(
 ): Promise<{ data: Santri | null; error: string | null }> {
   if (isSupabaseConfigured()) {
     try {
+      const payload: Record<string, unknown> = {
+        nama: updates.nama,
+        nis: updates.nis,
+        jenis_kelamin: updates.jenis_kelamin,
+        rayon: updates.rayon,
+        status_santri: updates.status_santri,
+        barcode_value: updates.barcode_value,
+        nama_wali: updates.nama_wali,
+        kontak_wali: updates.kontak_wali,
+        alamat: updates.alamat,
+        updated_at: new Date().toISOString(),
+      };
+
+      if (updates.kelas_id !== undefined) {
+        payload.kelas_id = isValidUuid(updates.kelas_id) ? updates.kelas_id : null;
+      }
+      if (updates.kamar_id !== undefined) {
+        payload.kamar_id = isValidUuid(updates.kamar_id) ? updates.kamar_id : null;
+      }
+
       const { data, error } = await supabase
         .from('santri')
-        .update({
-          nama: updates.nama,
-          nis: updates.nis,
-          jenis_kelamin: updates.jenis_kelamin,
-          kelas_id: updates.kelas_id,
-          kamar_id: updates.kamar_id,
-          rayon: updates.rayon,
-          status_santri: updates.status_santri,
-          barcode_value: updates.barcode_value,
-          nama_wali: updates.nama_wali,
-          kontak_wali: updates.kontak_wali,
-          alamat: updates.alamat,
-          updated_at: new Date().toISOString(),
-        })
+        .update(payload)
         .eq('id', id)
         .select(`
           *,
@@ -421,11 +442,11 @@ export async function updateSantri(
         `)
         .single();
 
-      if (error) return { data: null, error: error.message };
+      if (error) return { data: null, error: formatDbError(error.message) };
       return { data: data as Santri, error: null };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal memperbarui santri';
-      return { data: null, error: msg };
+      return { data: null, error: formatDbError(msg) };
     }
   }
 
@@ -445,11 +466,11 @@ export async function deleteSantri(id: string): Promise<{ success: boolean; erro
   if (isSupabaseConfigured()) {
     try {
       const { error } = await supabase.from('santri').delete().eq('id', id);
-      if (error) return { success: false, error: error.message };
+      if (error) return { success: false, error: formatDbError(error.message) };
       return { success: true, error: null };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menghapus santri';
-      return { success: false, error: msg };
+      return { success: false, error: formatDbError(msg) };
     }
   }
 

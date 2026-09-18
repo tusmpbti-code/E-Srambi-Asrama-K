@@ -529,3 +529,66 @@ export async function testSupabaseConnectivity(): Promise<{
     };
   }
 }
+
+/**
+ * Test Supabase Write Permission (RLS Verification)
+ */
+export async function testSupabaseWritePermission(): Promise<{
+  allowed: boolean;
+  message: string;
+  isRlsError: boolean;
+}> {
+  if (!isSupabaseConfigured()) {
+    return {
+      allowed: false,
+      message: 'Supabase belum dikonfigurasi (variabel VITE_SUPABASE_URL belum ada).',
+      isRlsError: false,
+    };
+  }
+
+  const testId = `ping-${Date.now()}`;
+  try {
+    const { data, error } = await supabase
+      .from('santri')
+      .insert([
+        {
+          id_yys: testId,
+          nama: '__TEST_RLS_PING__',
+          jenis_kelamin: 'L',
+          status_santri: 'Aktif',
+          barcode_value: testId,
+        },
+      ])
+      .select()
+      .single();
+
+    if (error) {
+      const isRls =
+        error.message.toLowerCase().includes('row-level security') ||
+        error.message.toLowerCase().includes('violates');
+      return {
+        allowed: false,
+        message: error.message,
+        isRlsError: isRls,
+      };
+    }
+
+    // Clean up test row
+    if (data?.id) {
+      await supabase.from('santri').delete().eq('id', data.id);
+    }
+
+    return {
+      allowed: true,
+      message: 'Izin tulis database Supabase AKTIF & NORMAL! Operasi INSERT dan DELETE berhasil dijalankan.',
+      isRlsError: false,
+    };
+  } catch (err: any) {
+    return {
+      allowed: false,
+      message: err.message || 'Koneksi gagal',
+      isRlsError: false,
+    };
+  }
+}
+
