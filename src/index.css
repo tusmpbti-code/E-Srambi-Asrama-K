@@ -1,1 +1,28 @@
 @import "tailwindcss";
+
+/* Styling untuk HTML5 QrCode Scanner agar video kamera tampil penuh dan tidak hitam/terpotong */
+#absensi-camera-viewport {
+  width: 100% !important;
+  max-width: 480px;
+  margin: 0 auto;
+  min-height: 260px;
+  position: relative;
+  border-radius: 1rem;
+  overflow: hidden;
+  background-color: #020617;
+}
+
+#absensi-camera-viewport video {
+  width: 100% !important;
+  height: 100% !important;
+  min-height: 260px !important;
+  max-height: 380px !important;
+  object-fit: cover !important;
+  border-radius: 0.875rem !important;
+  display: block !important;
+  margin: 0 auto !important;
+}
+
+#absensi-camera-viewport #qr-shaded-region {
+  border-radius: 0.875rem !important;
+}

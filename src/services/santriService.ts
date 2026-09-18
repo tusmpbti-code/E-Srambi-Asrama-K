@@ -405,6 +405,205 @@ export async function createSantri(
   return { data: enrichSantri(newSantri, memoryKamar, memoryKelas), error: null };
 }
 
+export interface ImportSantriRow {
+  id_yys: string;
+  nama: string;
+  nis?: string;
+  jenis_kelamin: 'L' | 'P';
+  kelas_id?: string | null;
+  kamar_id?: string | null;
+  rayon?: string;
+  status_santri?: StatusSantri;
+  barcode_value?: string;
+  nama_wali?: string;
+  kontak_wali?: string;
+  alamat?: string;
+}
+
+export interface ImportSantriResult {
+  total: number;
+  successCount: number;
+  failedCount: number;
+  errors: Array<{ row: number; id_yys?: string; message: string }>;
+}
+
+export async function importSantriBatch(
+  rows: ImportSantriRow[],
+  userEmail?: string
+): Promise<ImportSantriResult> {
+  const result: ImportSantriResult = {
+    total: rows.length,
+    successCount: 0,
+    failedCount: 0,
+    errors: [],
+  };
+
+  if (rows.length === 0) {
+    return result;
+  }
+
+  // Pre-process and validate rows
+  const validPayloads: Array<{
+    id_yys: string;
+    nama: string;
+    nis: string | null;
+    jenis_kelamin: 'L' | 'P';
+    kelas_id: string | null;
+    kamar_id: string | null;
+    rayon: string | null;
+    status_santri: StatusSantri;
+    barcode_value: string;
+    nama_wali: string | null;
+    kontak_wali: string | null;
+    alamat: string | null;
+    originalIndex: number;
+  }> = [];
+
+  const seenIds = new Set<string>();
+
+  rows.forEach((row, idx) => {
+    const rowNum = idx + 1;
+    const cleanId = (row.id_yys || '').trim().toUpperCase();
+    const cleanNama = (row.nama || '').trim();
+
+    if (!cleanId) {
+      result.failedCount++;
+      result.errors.push({ row: rowNum, message: 'ID YYS wajib diisi.' });
+      return;
+    }
+
+    if (!cleanNama) {
+      result.failedCount++;
+      result.errors.push({ row: rowNum, id_yys: cleanId, message: 'Nama santri wajib diisi.' });
+      return;
+    }
+
+    if (seenIds.has(cleanId)) {
+      result.failedCount++;
+      result.errors.push({ row: rowNum, id_yys: cleanId, message: `Duplikasi ID YYS '${cleanId}' di dalam file import.` });
+      return;
+    }
+    seenIds.add(cleanId);
+
+    // Normalize gender
+    let jk: 'L' | 'P' = 'L';
+    const rawJk = (row.jenis_kelamin || '').trim().toUpperCase();
+    if (rawJk === 'P' || rawJk === 'PEREMPUAN' || rawJk === 'WANITA') {
+      jk = 'P';
+    }
+
+    // Normalize status
+    let status: StatusSantri = 'Aktif';
+    const rawStatus = (row.status_santri || '').trim();
+    if (['Aktif', 'Izin', 'Sakit', 'Nonaktif', 'Lulus'].includes(rawStatus)) {
+      status = rawStatus as StatusSantri;
+    }
+
+    validPayloads.push({
+      id_yys: cleanId,
+      nama: cleanNama,
+      nis: row.nis?.trim() || null,
+      jenis_kelamin: jk,
+      kelas_id: isValidUuid(row.kelas_id) ? row.kelas_id! : null,
+      kamar_id: isValidUuid(row.kamar_id) ? row.kamar_id! : null,
+      rayon: row.rayon?.trim() || null,
+      status_santri: status,
+      barcode_value: row.barcode_value?.trim() || cleanId,
+      nama_wali: row.nama_wali?.trim() || null,
+      kontak_wali: row.kontak_wali?.trim() || null,
+      alamat: row.alamat?.trim() || null,
+      originalIndex: rowNum,
+    });
+  });
+
+  if (validPayloads.length === 0) {
+    return result;
+  }
+
+  // If Supabase is configured, upsert into 'santri' in chunks of 50
+  if (isSupabaseConfigured()) {
+    const CHUNK_SIZE = 50;
+    for (let i = 0; i < validPayloads.length; i += CHUNK_SIZE) {
+      const chunk = validPayloads.slice(i, i + CHUNK_SIZE);
+      const dbPayloads = chunk.map(({ originalIndex, ...rest }) => rest);
+
+      try {
+        const { data, error } = await supabase
+          .from('santri')
+          .upsert(dbPayloads, { onConflict: 'id_yys' })
+          .select('id, id_yys');
+
+        if (error) {
+          // If bulk upsert failed, try item-by-item to salvage valid records
+          for (const item of chunk) {
+            const { originalIndex, ...singlePayload } = item;
+            const { error: singleError } = await supabase
+              .from('santri')
+              .upsert([singlePayload], { onConflict: 'id_yys' });
+
+            if (singleError) {
+              result.failedCount++;
+              result.errors.push({
+                row: originalIndex,
+                id_yys: singlePayload.id_yys,
+                message: formatDbError(singleError.message),
+              });
+            } else {
+              result.successCount++;
+            }
+          }
+        } else {
+          result.successCount += data ? data.length : chunk.length;
+        }
+      } catch (err: any) {
+        result.failedCount += chunk.length;
+        chunk.forEach((item) => {
+          result.errors.push({
+            row: item.originalIndex,
+            id_yys: item.id_yys,
+            message: formatDbError(err.message || 'Gagal menyimpan ke database Supabase.'),
+          });
+        });
+      }
+    }
+
+    if (result.successCount > 0) {
+      await logAudit({
+        action: 'IMPORT_SANTRI_BATCH',
+        tableName: 'santri',
+        userEmail,
+        details: { totalSuccess: result.successCount, totalFailed: result.failedCount },
+      });
+    }
+
+    return result;
+  }
+
+  // Memory fallback
+  validPayloads.forEach((item) => {
+    const existingIdx = memorySantri.findIndex(
+      (s) => s.id_yys.toUpperCase() === item.id_yys.toUpperCase()
+    );
+    if (existingIdx >= 0) {
+      memorySantri[existingIdx] = {
+        ...memorySantri[existingIdx],
+        ...item,
+        updated_at: new Date().toISOString(),
+      };
+    } else {
+      memorySantri.unshift({
+        id: `d-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+        ...item,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString(),
+      });
+    }
+    result.successCount++;
+  });
+
+  return result;
+}
+
 export async function updateSantri(
   id: string,
   updates: Partial<Santri>

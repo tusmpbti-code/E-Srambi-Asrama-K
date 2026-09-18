@@ -23,6 +23,7 @@ import {
   Phone,
   Calendar,
   Lock,
+  FileSpreadsheet,
 } from 'lucide-react';
 import { Santri, Kelas, Kamar, StatusSantri, JenisKelamin } from '../types';
 import {
@@ -35,6 +36,7 @@ import {
 } from '../services/santriService';
 import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../lib/roles';
+import { ImportSantriModal } from './ImportSantriModal';
 
 interface SantriViewProps {
   onOpenBarcodeModal: () => void;
@@ -61,6 +63,7 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
 
   // Modals state
   const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [editingSantri, setEditingSantri] = useState<Santri | null>(null);
   const [viewingSantri, setViewingSantri] = useState<Santri | null>(null);
   const [deletingSantri, setDeletingSantri] = useState<Santri | null>(null);
@@ -273,15 +276,27 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
           </button>
 
           {canEdit && (
-            <button
-              id="btn-add-santri"
-              type="button"
-              onClick={openAddModal}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>Tambah Santri Baru</span>
-            </button>
+            <>
+              <button
+                id="btn-import-santri"
+                type="button"
+                onClick={() => setIsImportModalOpen(true)}
+                className="flex items-center gap-1.5 px-3.5 py-2 rounded-xl bg-teal-50 hover:bg-teal-100 text-teal-800 font-semibold text-xs transition-colors border border-teal-200"
+              >
+                <FileSpreadsheet className="w-4 h-4 text-teal-700" />
+                <span>Import Data (Excel/CSV)</span>
+              </button>
+
+              <button
+                id="btn-add-santri"
+                type="button"
+                onClick={openAddModal}
+                className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-semibold text-xs transition-colors shadow-xs"
+              >
+                <Plus className="w-4 h-4" />
+                <span>Tambah Santri Baru</span>
+              </button>
+            </>
           )}
         </div>
       </div>
@@ -1042,6 +1057,16 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
           </div>
         </div>
       )}
+      {/* Import Santri Modal (Excel / CSV) */}
+      <ImportSantriModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => {
+          fetchData();
+        }}
+        kelasList={kelasList}
+        kamarList={kamarList}
+      />
     </div>
   );
 };
