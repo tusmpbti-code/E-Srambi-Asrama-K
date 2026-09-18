@@ -1,0 +1,6 @@
+{
+  "name": "Sistem Absensi & Perizinan Santri Terpadu",
+  "description": "Sistem pengelolaan absensi dan perizinan santri terpadu berbasis Supabase, barcode ID YYS, dan role-based access control.",
+  "requestFramePermissions": ["camera"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
