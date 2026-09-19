@@ -20,6 +20,7 @@ import { SupabaseGuideModal } from './components/SupabaseGuideModal';
 import { BarcodeScannerModal } from './components/BarcodeScannerModal';
 import { UnifiedBarcodeScanner } from './components/common/UnifiedBarcodeScanner';
 import { GlobalSearchModal } from './components/common/GlobalSearchModal';
+import { MobileBottomNav } from './components/common/MobileBottomNav';
 import { SantriDetailModal } from './components/santri/SantriDetailModal';
 import { LoginModal } from './components/LoginModal';
 import { ActiveNavMenu, Santri } from './types';
@@ -87,7 +88,7 @@ const MainAppContent: React.FC = () => {
         />
 
         {/* Content Area */}
-        <main className="flex-1 p-4 sm:p-6 lg:p-8 min-w-0">
+        <main className="flex-1 p-3 sm:p-6 lg:p-8 min-w-0 pb-24 md:pb-8">
           {!user ? (
             /* Unauthenticated Banner with Login Button */
             <div className="max-w-md mx-auto my-12 bg-white p-8 rounded-2xl border border-slate-200 shadow-sm text-center space-y-4">
@@ -186,6 +187,14 @@ const MainAppContent: React.FC = () => {
           )}
         </main>
       </div>
+
+      {/* Smartphone Bottom Navigation Bar (Accessible & Ergonomic) */}
+      <MobileBottomNav
+        currentMenu={currentMenu}
+        onSelectMenu={(menu) => setCurrentMenu(menu)}
+        onOpenBarcodeModal={() => setBarcodeModalOpen(true)}
+        onOpenSidebar={() => setSidebarOpen(true)}
+      />
 
       {/* Global Modals */}
       <SupabaseGuideModal

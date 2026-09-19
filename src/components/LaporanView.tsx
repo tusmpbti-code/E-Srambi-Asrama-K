@@ -36,6 +36,7 @@ import {
   Kelas,
   Kamar,
   Santri,
+  getSantriMadinText,
 } from '../types';
 import {
   getKegiatanList,
@@ -97,6 +98,15 @@ export const LaporanView: React.FC = () => {
 
   // Modal Detail Santri
   const [selectedSantriForModal, setSelectedSantriForModal] = useState<Santri | null>(null);
+
+  const madinOptions = useMemo(() => {
+    const set = new Set<string>();
+    santriList.forEach((s) => {
+      const m = getSantriMadinText(s);
+      if (m && m !== '-') set.add(m);
+    });
+    return Array.from(set).sort();
+  }, [santriList]);
 
   // Load master datasets
   useEffect(() => {
@@ -209,7 +219,7 @@ export const LaporanView: React.FC = () => {
       'Nama Santri',
       'Kelas',
       'Kamar',
-      'Rayon',
+      'Kelas Madin',
       'Modul / Kegiatan',
       'Kategori / Detail',
       'Status',
@@ -277,7 +287,7 @@ export const LaporanView: React.FC = () => {
               <th>Nama Santri</th>
               <th>Kelas</th>
               <th>Kamar</th>
-              <th>Rayon</th>
+              <th>Kelas Madin</th>
               <th>Modul/Kegiatan</th>
               <th>Status</th>
               <th>Waktu</th>
@@ -506,26 +516,27 @@ export const LaporanView: React.FC = () => {
               >
                 <option value="SEMUA">Semua Kamar</option>
                 {kamarList.map((k) => (
-                  <option key={k.id} value={k.id}>
+                  <option key={k.id} value={k.nama_kamar}>
                     {k.nama_kamar}
                   </option>
                 ))}
               </select>
             </div>
 
-            {/* Rayon */}
+            {/* Kelas Madin */}
             <div>
-              <label className="block text-zinc-500 font-semibold mb-1">Rayon / Wilayah</label>
+              <label className="block text-zinc-500 font-semibold mb-1">Kelas Madin</label>
               <select
                 value={rayon}
                 onChange={(e) => setRayon(e.target.value)}
                 className="w-full px-2.5 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-700 bg-white"
               >
-                <option value="SEMUA">Semua Rayon</option>
-                <option value="Pusat">Rayon Pusat</option>
-                <option value="Timur">Rayon Timur</option>
-                <option value="Barat">Rayon Barat</option>
-                <option value="Selatan">Rayon Selatan</option>
+                <option value="SEMUA">Semua Kelas Madin</option>
+                {madinOptions.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
               </select>
             </div>
 
@@ -691,7 +702,7 @@ export const LaporanView: React.FC = () => {
                       </td>
                       <td className="py-3 px-4 whitespace-nowrap">
                         <div className="font-medium text-zinc-800">{it.kelas}</div>
-                        <div className="text-[11px] text-zinc-500">{it.kamar} • Rayon {it.rayon}</div>
+                        <div className="text-[11px] text-zinc-500">{it.kamar ? (it.kamar.startsWith('Kamar') ? it.kamar : `Kamar ${it.kamar}`) : '-'} • Madin: {it.rayon}</div>
                       </td>
                       <td className="py-3 px-4">
                         <div className="font-semibold text-zinc-900">{it.kegiatanModul}</div>

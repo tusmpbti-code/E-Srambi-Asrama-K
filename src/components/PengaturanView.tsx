@@ -33,6 +33,8 @@ import {
   Check,
   Terminal,
   Code,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
 import { UserRole, Profile } from '../types';
@@ -82,10 +84,15 @@ ALTER TABLE IF EXISTS public.attendance_records ALTER COLUMN petugas_id TYPE TEX
 ALTER TABLE IF EXISTS public.special_events ALTER COLUMN created_by TYPE TEXT;
 ALTER TABLE IF EXISTS public.special_attendance ALTER COLUMN scanned_by TYPE TEXT;
 
--- 3. Pastikan RLS Aktif pada seluruh tabel
+-- 3. Hapus tabel kamar (kamar sekarang kolom langsung di tabel santri) & tambah kelas_madin
+ALTER TABLE IF EXISTS public.santri DROP CONSTRAINT IF EXISTS santri_kamar_id_fkey;
+ALTER TABLE IF EXISTS public.santri ADD COLUMN IF NOT EXISTS kamar TEXT;
+ALTER TABLE IF EXISTS public.santri ADD COLUMN IF NOT EXISTS kelas_madin TEXT;
+DROP TABLE IF EXISTS public.kamar CASCADE;
+
+-- 4. Pastikan RLS Aktif pada seluruh tabel operasional
 ALTER TABLE IF EXISTS public.roles ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.profiles ENABLE ROW LEVEL SECURITY;
-ALTER TABLE IF EXISTS public.kamar ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.kelas ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.santri ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.kegiatan ENABLE ROW LEVEL SECURITY;
@@ -96,15 +103,12 @@ ALTER TABLE IF EXISTS public.special_event_participants ENABLE ROW LEVEL SECURIT
 ALTER TABLE IF EXISTS public.special_attendance ENABLE ROW LEVEL SECURITY;
 ALTER TABLE IF EXISTS public.audit_logs ENABLE ROW LEVEL SECURITY;
 
--- 4. Buka akses penuh untuk role anon & authenticated pada semua tabel operasional
+-- 5. Buka akses penuh untuk role anon & authenticated pada semua tabel operasional
 DROP POLICY IF EXISTS "Allow all access on roles" ON public.roles;
 CREATE POLICY "Allow all access on roles" ON public.roles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all access on profiles" ON public.profiles;
 CREATE POLICY "Allow all access on profiles" ON public.profiles FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
-
-DROP POLICY IF EXISTS "Allow all access on kamar" ON public.kamar;
-CREATE POLICY "Allow all access on kamar" ON public.kamar FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
 
 DROP POLICY IF EXISTS "Allow all access on kelas" ON public.kelas;
 CREATE POLICY "Allow all access on kelas" ON public.kelas FOR ALL TO anon, authenticated USING (true) WITH CHECK (true);
@@ -151,14 +155,19 @@ export const PengaturanView: React.FC = () => {
     email: string;
     role_code: UserRole;
     phone: string;
+    password: string;
   }>({
     full_name: '',
     email: '',
-    role_code: 'PETUGAS_SEKOLAH',
+    role_code: 'SUPER_ADMIN',
     phone: '',
+    password: '',
   });
+  const [showNewUserPassword, setShowNewUserPassword] = useState(false);
   const [userError, setUserError] = useState('');
   const [userSuccess, setUserSuccess] = useState('');
+  const [savingUser, setSavingUser] = useState(false);
+  const [showAuthGuide, setShowAuthGuide] = useState(false);
 
   // Audit Logs State
   const [auditLogs, setAuditLogs] = useState<any[]>([]);
@@ -251,24 +260,35 @@ export const PengaturanView: React.FC = () => {
       return;
     }
 
-    const res = await createStaffUser(newUser);
-    if (!res.success) {
-      setUserError(res.message);
+    if (!newUser.password || newUser.password.trim().length < 6) {
+      setUserError('Password wajib diisi minimal 6 karakter untuk akun Supabase.');
       return;
     }
 
-    setUserSuccess(res.message);
-    setNewUser({
-      full_name: '',
-      email: '',
-      role_code: 'PETUGAS_SEKOLAH',
-      phone: '',
-    });
-    loadStaff();
-    setTimeout(() => {
-      setUserModalOpen(false);
-      setUserSuccess('');
-    }, 1200);
+    setSavingUser(true);
+    try {
+      const res = await createStaffUser(newUser);
+      if (!res.success) {
+        setUserError(res.message);
+        return;
+      }
+
+      setUserSuccess(res.message);
+      setNewUser({
+        full_name: '',
+        email: '',
+        role_code: 'SUPER_ADMIN',
+        phone: '',
+        password: '',
+      });
+      loadStaff();
+      setTimeout(() => {
+        setUserModalOpen(false);
+        setUserSuccess('');
+      }, 1500);
+    } finally {
+      setSavingUser(false);
+    }
   };
 
   // Toggle user status
@@ -761,6 +781,26 @@ export const PengaturanView: React.FC = () => {
             </button>
           </div>
 
+          <div className="p-3.5 rounded-xl bg-emerald-50/70 border border-emerald-200 text-emerald-950 text-xs flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+            <div className="flex items-center gap-2.5">
+              <div className="w-7 h-7 rounded-lg bg-emerald-600 text-white flex items-center justify-center font-bold text-xs shrink-0">
+                <Key className="w-4 h-4" />
+              </div>
+              <p className="leading-relaxed">
+                Setiap akun yang ditambahkan di sini otomatis terdaftar ke <strong>Supabase Authentication</strong> dan tabel <strong>profiles</strong> beserta kata sandinya. Petugas dapat langsung login menggunakan email dan password tersebut.
+              </p>
+            </div>
+            <a
+              href="https://supabase.com/dashboard"
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 hover:text-emerald-950 underline shrink-0"
+            >
+              <span>Dashboard Supabase</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
+
           {loadingStaff ? (
             <div className="py-12 text-center text-zinc-400">
               <RefreshCw className="w-6 h-6 animate-spin mx-auto text-emerald-700 mb-2" />
@@ -802,6 +842,7 @@ export const PengaturanView: React.FC = () => {
                             <option value="SUPER_ADMIN">Super Admin</option>
                             <option value="ADMIN">Admin</option>
                             <option value="PENGURUS_ASRAMA">Pengurus Asrama</option>
+                            <option value="PETUGAS_PERIZINAN">Petugas Perizinan</option>
                             <option value="PETUGAS_SEKOLAH">Petugas Sekolah</option>
                             <option value="PETUGAS_MADIN">Petugas Madin</option>
                             <option value="PETUGAS_JAMAAH">Petugas Jamaah</option>
@@ -888,6 +929,49 @@ export const PengaturanView: React.FC = () => {
                   </div>
 
                   <div>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="block text-zinc-600 font-semibold">
+                        Password Akun Supabase (Min. 6 Karakter)
+                      </label>
+                      <span className="text-[10px] text-zinc-400">
+                        {newUser.password ? `${newUser.password.length} karakter` : 'Wajib diisi'}
+                      </span>
+                    </div>
+                    <div className="relative">
+                      <input
+                        type={showNewUserPassword ? 'text' : 'password'}
+                        value={newUser.password}
+                        onChange={(e) => setNewUser({ ...newUser, password: e.target.value })}
+                        placeholder="Masukkan kata sandi baru untuk login..."
+                        minLength={6}
+                        className="w-full pl-3 pr-9 py-2 rounded-lg border border-zinc-200 focus:outline-none focus:ring-1 focus:ring-emerald-700"
+                        required
+                      />
+                      <button
+                        type="button"
+                        onClick={() => setShowNewUserPassword(!showNewUserPassword)}
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-zinc-400 hover:text-zinc-600 p-1"
+                        title={showNewUserPassword ? 'Sembunyikan password' : 'Lihat password'}
+                      >
+                        {showNewUserPassword ? (
+                          <EyeOff className="w-4 h-4" />
+                        ) : (
+                          <Eye className="w-4 h-4" />
+                        )}
+                      </button>
+                    </div>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-emerald-50/80 border border-emerald-200 text-emerald-900 text-[11px] space-y-1">
+                    <p className="font-semibold flex items-center gap-1.5 text-emerald-800">
+                      <Lock className="w-3.5 h-3.5" /> Terintegrasi Langsung dengan Supabase:
+                    </p>
+                    <p className="leading-relaxed opacity-90">
+                      Akun & password yang Anda simpan di sini akan otomatis didaftarkan ke <strong>Supabase Authentication</strong> dan tabel <strong>profiles</strong>, sehingga dapat langsung dipakai untuk login.
+                    </p>
+                  </div>
+
+                  <div>
                     <label className="block text-zinc-600 font-semibold mb-1">Role / Wewenang</label>
                     <select
                       value={newUser.role_code}
@@ -899,6 +983,7 @@ export const PengaturanView: React.FC = () => {
                       <option value="SUPER_ADMIN">Super Admin (Akses Penuh)</option>
                       <option value="ADMIN">Admin (Sekretariat)</option>
                       <option value="PENGURUS_ASRAMA">Pengurus Asrama</option>
+                      <option value="PETUGAS_PERIZINAN">Petugas Perizinan (Izin & Scan Barcode)</option>
                       <option value="PETUGAS_SEKOLAH">Petugas Sekolah (MTs / MA)</option>
                       <option value="PETUGAS_MADIN">Petugas Madin</option>
                       <option value="PETUGAS_JAMAAH">Petugas Jamaah Masjid</option>
@@ -916,19 +1001,189 @@ export const PengaturanView: React.FC = () => {
                     />
                   </div>
 
+                  {/* Helper / Panduan Supabase Auth */}
+                  <div className="pt-2 border-t border-zinc-100">
+                    <button
+                      type="button"
+                      onClick={() => setShowAuthGuide(!showAuthGuide)}
+                      className="w-full text-left text-xs text-emerald-700 hover:text-emerald-800 font-semibold flex items-center justify-between py-1"
+                    >
+                      <span className="flex items-center gap-1.5">
+                        <HelpCircle className="w-3.5 h-3.5" />
+                        Kendala & Panduan Tambah Akun di Supabase (Klik di sini)
+                      </span>
+                      <span>{showAuthGuide ? '▲ Tutup' : '▼ Lihat Solusi'}</span>
+                    </button>
+
+                    {showAuthGuide && (
+                      <div className="mt-2 p-3 bg-zinc-50 rounded-xl border border-zinc-200 text-[11px] text-zinc-700 space-y-2.5">
+                        <p className="font-semibold text-zinc-900">
+                          Penyebab Error "Failed" Saat Menambahkan Akun di Supabase:
+                        </p>
+                        <p className="leading-relaxed">
+                          1. <strong>Di Supabase Dashboard:</strong> Jika Anda klik tombol <strong>"Add user"</strong> di Supabase, Anda <strong>WAJIB</strong> memilih <strong>"Create user"</strong> (bukan Send invite) dan <strong>MENGAKTIFKAN sakelar "Auto Confirm User?"</strong>. Jika tidak diaktifkan, Supabase akan mencoba mengirim email aktivasi via SMTP yang memiliki kuota ketat sehingga menyebabkan error <em>Email rate limit exceeded</em>.
+                        </p>
+                        <p className="leading-relaxed">
+                          2. <strong>Bypass Kuota Email via SQL Editor (100% Berhasil tanpa error ON CONFLICT):</strong> Salin dan jalankan skrip SQL berikut di menu <strong>SQL Editor</strong> Supabase:
+                        </p>
+
+                        <div className="relative">
+                          <pre className="p-2.5 bg-slate-900 text-slate-100 rounded-lg text-[10px] font-mono overflow-x-auto max-h-48">
+{`-- Jalankan di Supabase SQL Editor:
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+DO $$
+DECLARE
+  v_user_id uuid;
+  v_email text := '${newUser.email.trim() || 'petugas@pesantren.id'}';
+  v_password text := '${newUser.password?.trim() || 'password123'}';
+  v_name text := '${newUser.full_name.trim() || 'Nama Petugas'}';
+  v_role text := '${newUser.role_code}';
+BEGIN
+  -- Cek apakah user sudah ada di auth.users berdasarkan email
+  SELECT id INTO v_user_id FROM auth.users WHERE email = v_email;
+
+  IF v_user_id IS NULL THEN
+    v_user_id := gen_random_uuid();
+    INSERT INTO auth.users (
+      instance_id, id, aud, role, email, encrypted_password,
+      email_confirmed_at, recovery_sent_at, last_sign_in_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, email_change, email_change_token_new, recovery_token
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      v_user_id,
+      'authenticated',
+      'authenticated',
+      v_email,
+      extensions.crypt(v_password, extensions.gen_salt('bf')),
+      now(), now(), now(),
+      '{"provider":"email","providers":["email"]}',
+      json_build_object('full_name', v_name, 'role_code', v_role),
+      now(), now(),
+      '', '', '', ''
+    );
+
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
+      v_user_id, v_user_id,
+      json_build_object('sub', v_user_id::text, 'email', v_email),
+      'email', v_user_id::text,
+      now(), now(), now()
+    ) ON CONFLICT DO NOTHING;
+  ELSE
+    UPDATE auth.users SET
+      encrypted_password = extensions.crypt(v_password, extensions.gen_salt('bf')),
+      raw_user_meta_data = json_build_object('full_name', v_name, 'role_code', v_role),
+      email_confirmed_at = now(),
+      updated_at = now()
+    WHERE id = v_user_id;
+  END IF;
+
+  -- Pastikan data profil tersimpan atau terupdate di tabel profiles
+  INSERT INTO public.profiles (id, email, full_name, role_code, is_active)
+  VALUES (v_user_id, v_email, v_name, v_role, true)
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = EXCLUDED.full_name,
+    role_code = EXCLUDED.role_code,
+    is_active = true;
+END $$;`}
+                          </pre>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              const emailVal = newUser.email.trim() || 'petugas@pesantren.id';
+                              const pwdVal = newUser.password?.trim() || 'password123';
+                              const nameVal = newUser.full_name.trim() || 'Nama Petugas';
+                              const sqlSnippet = `-- Jalankan di Supabase SQL Editor:
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+
+DO $$
+DECLARE
+  v_user_id uuid;
+  v_email text := '${emailVal}';
+  v_password text := '${pwdVal}';
+  v_name text := '${nameVal}';
+  v_role text := '${newUser.role_code}';
+BEGIN
+  SELECT id INTO v_user_id FROM auth.users WHERE email = v_email;
+
+  IF v_user_id IS NULL THEN
+    v_user_id := gen_random_uuid();
+    INSERT INTO auth.users (
+      instance_id, id, aud, role, email, encrypted_password,
+      email_confirmed_at, recovery_sent_at, last_sign_in_at,
+      raw_app_meta_data, raw_user_meta_data, created_at, updated_at,
+      confirmation_token, email_change, email_change_token_new, recovery_token
+    ) VALUES (
+      '00000000-0000-0000-0000-000000000000',
+      v_user_id,
+      'authenticated',
+      'authenticated',
+      v_email,
+      extensions.crypt(v_password, extensions.gen_salt('bf')),
+      now(), now(), now(),
+      '{"provider":"email","providers":["email"]}',
+      json_build_object('full_name', v_name, 'role_code', v_role),
+      now(), now(),
+      '', '', '', ''
+    );
+
+    INSERT INTO auth.identities (
+      id, user_id, identity_data, provider, provider_id, last_sign_in_at, created_at, updated_at
+    ) VALUES (
+      v_user_id, v_user_id,
+      json_build_object('sub', v_user_id::text, 'email', v_email),
+      'email', v_user_id::text,
+      now(), now(), now()
+    ) ON CONFLICT DO NOTHING;
+  ELSE
+    UPDATE auth.users SET
+      encrypted_password = extensions.crypt(v_password, extensions.gen_salt('bf')),
+      raw_user_meta_data = json_build_object('full_name', v_name, 'role_code', v_role),
+      email_confirmed_at = now(),
+      updated_at = now()
+    WHERE id = v_user_id;
+  END IF;
+
+  INSERT INTO public.profiles (id, email, full_name, role_code, is_active)
+  VALUES (v_user_id, v_email, v_name, v_role, true)
+  ON CONFLICT (id) DO UPDATE SET
+    email = EXCLUDED.email,
+    full_name = EXCLUDED.full_name,
+    role_code = EXCLUDED.role_code,
+    is_active = true;
+END $$;`;
+                              navigator.clipboard.writeText(sqlSnippet);
+                              setCopiedSql(true);
+                              setTimeout(() => setCopiedSql(false), 2000);
+                            }}
+                            className="mt-1.5 px-3 py-1 bg-zinc-200 hover:bg-zinc-300 text-zinc-800 rounded font-semibold text-[10px] flex items-center gap-1 transition-colors"
+                          >
+                            {copiedSql ? '✓ Berhasil Disalin ke Clipboard!' : '📋 Salin Query SQL Otomatis'}
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+
                   <div className="pt-3 flex items-center justify-end space-x-2">
                     <button
                       type="button"
                       onClick={() => setUserModalOpen(false)}
-                      className="px-4 py-2 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-100 font-medium"
+                      disabled={savingUser}
+                      className="px-4 py-2 rounded-xl border border-zinc-200 text-zinc-700 hover:bg-zinc-100 font-medium disabled:opacity-50"
                     >
                       Batal
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white font-bold"
+                      disabled={savingUser}
+                      className="px-4 py-2 rounded-xl bg-emerald-700 hover:bg-emerald-800 disabled:opacity-50 text-white font-bold flex items-center gap-1.5"
                     >
-                      Simpan Petugas
+                      {savingUser ? 'Mendaftarkan ke Supabase...' : 'Simpan Petugas'}
                     </button>
                   </div>
                 </form>

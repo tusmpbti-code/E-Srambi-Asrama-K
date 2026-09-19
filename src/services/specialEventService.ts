@@ -250,8 +250,8 @@ export async function createSpecialEvent(
             lokasi: eventInput.lokasi.trim(),
             keterangan: eventInput.keterangan?.trim() || null,
             jenis_absensi: eventInput.jenis_absensi,
-            jam_batas_berangkat: eventInput.jam_batas_berangkat || null,
-            jam_batas_kembali: eventInput.jam_batas_kembali || null,
+            jam_batas_berangkat: eventInput.jam_batas_berangkat || eventInput.jam_berangkat || null,
+            jam_batas_kembali: eventInput.jam_batas_kembali || eventInput.jam_kembali || null,
             status: eventInput.status || 'AKTIF',
           },
         ])

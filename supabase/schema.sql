@@ -117,6 +117,9 @@ CREATE TABLE IF NOT EXISTS public.santri (
     jenis_kelamin jenis_kelamin_type NOT NULL DEFAULT 'L',
     kelas_id UUID REFERENCES public.kelas(id) ON DELETE SET NULL,
     kamar_id UUID REFERENCES public.kamar(id) ON DELETE SET NULL,
+    kamar VARCHAR(100), -- Kolom langsung teks kamar sesuai upload CSV/Excel (misal: 'K - 04')
+    kelas_nama VARCHAR(100), -- Kolom nama kelas teks (misal: '7 - FSMP')
+    kelas_madin VARCHAR(100), -- Kolom kelas madin (misal: 'MADIN - P', 'ULA - 5 B')
     rayon VARCHAR(100),
     status_santri status_santri_type NOT NULL DEFAULT 'Aktif',
     barcode_value VARCHAR(100) NOT NULL UNIQUE, -- Nilai Barcode fisik (sama dengan ID YYS)
@@ -300,6 +303,43 @@ DROP TRIGGER IF EXISTS trg_santri_updated_at ON public.santri;
 CREATE TRIGGER trg_santri_updated_at
     BEFORE UPDATE ON public.santri
     FOR EACH ROW EXECUTE FUNCTION public.handle_updated_at();
+
+-- TRIGGER SINKRONISASI KAMAR OTOMATIS:
+-- Mendaftarkan kamar baru dari impor CSV/Excel (seperti 'K - 04') ke master public.kamar
+CREATE OR REPLACE FUNCTION public.sync_santri_kamar_to_master()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_kamar_id UUID;
+    v_clean_kamar VARCHAR(100);
+BEGIN
+    v_clean_kamar := NULLIF(TRIM(NEW.kamar), '');
+    
+    IF v_clean_kamar IS NOT NULL THEN
+        INSERT INTO public.kamar (nama_kamar, gedung, kapasitas)
+        VALUES (v_clean_kamar, 'Asrama Pondok', 20)
+        ON CONFLICT (nama_kamar) DO NOTHING;
+        
+        SELECT id INTO v_kamar_id FROM public.kamar WHERE LOWER(nama_kamar) = LOWER(v_clean_kamar) LIMIT 1;
+        
+        NEW.kamar_id := v_kamar_id;
+        NEW.kamar := v_clean_kamar;
+    END IF;
+
+    IF NEW.kelas_madin IS NOT NULL AND NEW.rayon IS NULL THEN
+        NEW.rayon := NEW.kelas_madin;
+    ELSIF NEW.rayon IS NOT NULL AND NEW.kelas_madin IS NULL THEN
+        NEW.kelas_madin := NEW.rayon;
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_santri_kamar ON public.santri;
+CREATE TRIGGER trg_sync_santri_kamar
+    BEFORE INSERT OR UPDATE OF kamar, rayon, kelas_madin ON public.santri
+    FOR EACH ROW
+    EXECUTE FUNCTION public.sync_santri_kamar_to_master();
 
 DROP TRIGGER IF EXISTS trg_kegiatan_updated_at ON public.kegiatan;
 CREATE TRIGGER trg_kegiatan_updated_at

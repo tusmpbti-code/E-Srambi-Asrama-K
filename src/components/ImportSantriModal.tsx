@@ -19,7 +19,11 @@ import {
   ChevronRight,
 } from 'lucide-react';
 import { Kelas, Kamar } from '../types';
-import { importSantriBatch, ImportSantriRow, ImportSantriResult } from '../services/santriService';
+import {
+  importSantriBatch,
+  ImportSantriRow,
+  ImportSantriResult,
+} from '../services/santriService';
 import { useAuth } from '../context/AuthContext';
 
 interface ImportSantriModalProps {
@@ -27,13 +31,16 @@ interface ImportSantriModalProps {
   onClose: () => void;
   onSuccess: () => void;
   kelasList: Kelas[];
-  kamarList: Kamar[];
+  kamarList?: Kamar[];
+  onKamarCreated?: () => Promise<void>;
 }
 
 interface ParsedSantriPreview extends ImportSantriRow {
   rowNumber: number;
   kelasName?: string;
   kamarName?: string;
+  kelasMadin?: string;
+  rawKamarOriginal?: string;
   isValid: boolean;
   errors: string[];
 }
@@ -77,8 +84,8 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
         'NIS': 'NIS2026010',
         'Jenis Kelamin (L/P) (*)': 'L',
         'Kelas': kelasList[0]?.nama_kelas || 'Kelas 7-A MTs',
-        'Kamar': kamarList[0]?.nama_kamar || 'Al-Ghazali 01',
-        'Rayon': 'Surabaya',
+        'Kamar': 'Abu Bakar 1',
+        'Kelas Madin': 'Ula 1',
         'Status (Aktif/Izin/Sakit)': 'Aktif',
         'Barcode': 'YYS202600201',
         'Nama Wali': 'H. Ahmad Subhan',
@@ -91,8 +98,8 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
         'NIS': 'NIS2026011',
         'Jenis Kelamin (L/P) (*)': 'P',
         'Kelas': kelasList[1]?.nama_kelas || 'Kelas 8-B MTs',
-        'Kamar': kamarList[3]?.nama_kamar || 'Fathimah 01',
-        'Rayon': 'Sidoarjo',
+        'Kamar': 'Khadijah 2',
+        'Kelas Madin': 'Wustho 1',
         'Status (Aktif/Izin/Sakit)': 'Aktif',
         'Barcode': 'YYS202600202',
         'Nama Wali': 'Drs. H. Mulyono',
@@ -105,8 +112,8 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
         'NIS': 'NIS2026012',
         'Jenis Kelamin (L/P) (*)': 'L',
         'Kelas': kelasList[2]?.nama_kelas || 'Kelas 10-IPA MA',
-        'Kamar': kamarList[2]?.nama_kamar || 'Ibnu Sina 01',
-        'Rayon': 'Gresik',
+        'Kamar': 'Utsman 1',
+        'Kelas Madin': 'Ulya 1',
         'Status (Aktif/Izin/Sakit)': 'Aktif',
         'Barcode': 'YYS202600203',
         'Nama Wali': 'H. Mustofa Kamal',
@@ -150,36 +157,62 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
         return;
       }
 
-      // Map headers flexibly
+      // Helper untuk menormalkan nomor telepon (termasuk notasi ilmiah Excel seperti 8.58E+10)
+      const normalizePhone = (val: any): string => {
+        if (val === null || val === undefined) return '';
+        let str = String(val).trim();
+        if (!str) return '';
+        if (/^[0-9.]+[eE]\+?[0-9]+$/.test(str)) {
+          try {
+            const num = Number(str);
+            if (!isNaN(num) && isFinite(num)) {
+              str = BigInt(Math.round(num)).toString();
+            }
+          } catch {
+            // keep original
+          }
+        }
+        if (/^8[0-9]{8,13}$/.test(str)) {
+          str = '0' + str;
+        }
+        return str;
+      };
+
+      // Map headers flexibly & prioritized sesuai kolom file CSV/Excel santri
       const previews: ParsedSantriPreview[] = rawRows.map((raw, idx) => {
         const rowNumber = idx + 2; // +1 for 0-index, +1 for header row in Excel
+        const keys = Object.keys(raw);
 
-        // Find value by checking potential header names
-        const findVal = (possibleKeys: string[]): string => {
-          for (const key of Object.keys(raw)) {
-            const cleanKey = key.toLowerCase().replace(/[^a-z0-9]/g, '');
-            for (const target of possibleKeys) {
-              const cleanTarget = target.toLowerCase().replace(/[^a-z0-9]/g, '');
-              if (cleanKey.includes(cleanTarget) || cleanTarget.includes(cleanKey)) {
-                return String(raw[key] || '').trim();
+        // Find value by checking potential header names with regex or exact matches
+        const findColumn = (...patterns: (string | RegExp)[]): string => {
+          for (const pattern of patterns) {
+            for (const key of keys) {
+              const clean = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+              if (typeof pattern === 'string') {
+                const target = pattern.toLowerCase().replace(/[^a-z0-9]/g, '');
+                if (clean === target) return String(raw[key] ?? '').trim();
+              } else if (pattern.test(clean)) {
+                return String(raw[key] ?? '').trim();
               }
             }
           }
           return '';
         };
 
-        const id_yys = findVal(['idyys', 'id', 'noinduk', 'nomorinduk', 'yys']);
-        const nama = findVal(['namalengkap', 'nama', 'namasantri', 'fullname']);
-        const nis = findVal(['nis', 'nisn']);
-        const rawJk = findVal(['jeniskelamin', 'jk', 'gender', 'lp']);
-        const rawKelas = findVal(['kelas', 'namakelas', 'tingkat']);
-        const rawKamar = findVal(['kamar', 'namakamar', 'asrama', 'kobong']);
-        const rayon = findVal(['rayon', 'daerah', 'kota']);
-        const rawStatus = findVal(['statussantri', 'status']);
-        const rawBarcode = findVal(['barcode', 'barcodevalue', 'kodebarcode']);
-        const nama_wali = findVal(['namawali', 'wali', 'orangtua']);
-        const kontak_wali = findVal(['kontakwali', 'nohp', 'nohpwali', 'telepon']);
-        const alamat = findVal(['alamat', 'domisili']);
+        const id_yys = findColumn(/^idyys/, /^noinduk/, /^id$/, /^nomorinduk/, /^yys/);
+        // Pastikan nama santri tidak tertukar dengan nama wali
+        const nama = findColumn(/^namalen/, /^namalengkap/, /^namasantri/, /^fullname/, /^(nama|santri)$/);
+        const nis = findColumn(/^nis$/, /^nisn/);
+        const rawJk = findColumn(/^jeniskela/, /^jeniskelamin/, /^jk$/, /^gender/, /^lp$/);
+        const rawKelas = findColumn(/^kelas$/, /^namakelas/, /^tingkat/);
+        const rawKamar = findColumn(/^kamar/, /^namakamar/, /^asrama/, /^kobong/, /^room/);
+        const rawMadin = findColumn(/^rayon/, /^kelasmadin/, /^madin/, /^daerah/);
+        const rawStatus = findColumn(/^statusak/, /^statussantri/, /^status/);
+        const rawBarcode = findColumn(/^barcode/, /^barcodevalue/, /^kodebarcode/);
+        const nama_wali = findColumn(/^namawal/, /^namawali/, /^wali$/, /^orangtua/);
+        const rawKontakWali = findColumn(/^kontakw/, /^kontakwali/, /^nohpwali/, /^nohp/, /^telepon/);
+        const kontak_wali = normalizePhone(rawKontakWali);
+        const alamat = findColumn(/^alamat/, /^domisili/);
 
         // Determine gender
         let jk: 'L' | 'P' = 'L';
@@ -204,21 +237,9 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
           }
         }
 
-        // Match kamar by name
-        let matchedKamarId: string | undefined = undefined;
-        let matchedKamarName: string | undefined = undefined;
-        if (rawKamar) {
-          const foundKamar = kamarList.find(
-            (k) =>
-              k.nama_kamar.toLowerCase() === rawKamar.toLowerCase() ||
-              k.nama_kamar.toLowerCase().includes(rawKamar.toLowerCase()) ||
-              rawKamar.toLowerCase().includes(k.nama_kamar.toLowerCase())
-          );
-          if (foundKamar) {
-            matchedKamarId = foundKamar.id;
-            matchedKamarName = foundKamar.nama_kamar;
-          }
-        }
+        // Kamar adalah kolom langsung di tabel santri - data kamar tampil sesuai data yang di import
+        const cleanKamar = rawKamar ? rawKamar.trim() : undefined;
+        const cleanMadin = rawMadin ? rawMadin.trim() : undefined;
 
         // Validation
         const errors: string[] = [];
@@ -236,10 +257,13 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
           nis: nis || undefined,
           jenis_kelamin: jk,
           kelas_id: matchedKelasId,
-          kamar_id: matchedKamarId,
+          kamar: cleanKamar,
+          kamarName: cleanKamar,
+          rawKamarOriginal: cleanKamar,
+          kelas_madin: cleanMadin,
+          kelasMadin: cleanMadin,
+          rayon: cleanMadin,
           kelasName: matchedKelasName || rawKelas || undefined,
-          kamarName: matchedKamarName || rawKamar || undefined,
-          rayon: rayon || undefined,
           status_santri: (['Aktif', 'Izin', 'Sakit', 'Nonaktif', 'Lulus'].includes(rawStatus)
             ? rawStatus
             : 'Aktif') as any,
@@ -286,8 +310,10 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
         nis: r.nis,
         jenis_kelamin: r.jenis_kelamin,
         kelas_id: r.kelas_id,
-        kamar_id: r.kamar_id,
-        rayon: r.rayon,
+        kamar: r.kamarName || r.kamar || null,
+        kamar_id: null,
+        kelas_madin: r.kelasMadin || r.rayon || null,
+        rayon: r.kelasMadin || r.rayon || null,
         status_santri: r.status_santri,
         barcode_value: r.barcode_value,
         nama_wali: r.nama_wali,
@@ -479,7 +505,7 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
                     Pratinjau Data Santri ({parsedRows.length} Data)
                   </span>
                   <span className="text-slate-500 text-[11px]">
-                    Kolom kelas & kamar akan dicocokkan otomatis dengan data sistem
+                    Data Kamar dan Kelas Madin disimpan langsung sesuai data berkas impor
                   </span>
                 </div>
 
@@ -493,7 +519,7 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
                         <th className="py-2.5 px-3">L/P</th>
                         <th className="py-2.5 px-3">Kelas</th>
                         <th className="py-2.5 px-3">Kamar</th>
-                        <th className="py-2.5 px-3">Rayon</th>
+                        <th className="py-2.5 px-3">Kelas Madin</th>
                         <th className="py-2.5 px-3">Status</th>
                       </tr>
                     </thead>
@@ -528,11 +554,23 @@ export const ImportSantriModal: React.FC<ImportSantriModalProps> = ({
                           <td className="py-2 px-3 text-slate-600">
                             {row.kelasName || '-'}
                           </td>
-                          <td className="py-2 px-3 text-slate-600">
-                            {row.kamarName || '-'}
+                          <td className="py-2 px-3 text-slate-700 font-medium">
+                            {row.kamarName ? (
+                              <span className="inline-flex items-center px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 font-bold border border-emerald-200 text-[11px]">
+                                {row.kamarName}
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 italic">Tanpa Kamar</span>
+                            )}
                           </td>
                           <td className="py-2 px-3 text-slate-600">
-                            {row.rayon || '-'}
+                            {row.kelasMadin || row.rayon ? (
+                              <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-medium">
+                                {row.kelasMadin || row.rayon}
+                              </span>
+                            ) : (
+                              '-'
+                            )}
                           </td>
                           <td className="py-2 px-3">
                             {row.isValid ? (

@@ -16,10 +16,12 @@ import {
   Plus,
   Trash2,
   Clock,
+  Moon,
 } from 'lucide-react';
 import {
   SpecialEventAttendanceType,
   SpecialEventStatus,
+  SPECIAL_EVENT_ATTENDANCE_MODELS,
   Santri,
   Kelas,
   Kamar,
@@ -51,12 +53,24 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
   const [customJenis, setCustomJenis] = useState('');
   const [tanggalMulai, setTanggalMulai] = useState(today);
   const [tanggalSelesai, setTanggalSelesai] = useState(today);
+  const [jamBerangkat, setJamBerangkat] = useState('08:00');
+  const [jamKembali, setJamKembali] = useState('17:00');
   const [lokasi, setLokasi] = useState('');
   const [keterangan, setKeterangan] = useState('');
-  const [jenisAbsensi, setJenisAbsensi] = useState<SpecialEventAttendanceType>('BERANGKAT_KEMBALI');
-  const [jamBatasBerangkat, setJamBatasBerangkat] = useState('08:00');
-  const [jamBatasKembali, setJamBatasKembali] = useState('17:00');
+  const [jenisAbsensi, setJenisAbsensi] = useState<SpecialEventAttendanceType>('BERANGKAT_KEMBALI_MENGINAP');
   const [status, setStatus] = useState<SpecialEventStatus>('AKTIF');
+
+  // Perhitungan durasi malam menginap
+  const calcNights = () => {
+    if (!tanggalMulai || !tanggalSelesai) return 0;
+    const start = new Date(tanggalMulai);
+    const end = new Date(tanggalSelesai);
+    const diffTime = end.getTime() - start.getTime();
+    return Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  };
+
+  const isMenginap = jenisAbsensi === 'BERANGKAT_KEMBALI_MENGINAP';
+  const durasiMalam = isMenginap ? calcNights() : 0;
 
   // Participants selection
   const [selectedParticipants, setSelectedParticipants] = useState<
@@ -146,11 +160,15 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
           jenis_kegiatan: finalJenis,
           tanggal_mulai: tanggalMulai,
           tanggal_selesai: tanggalSelesai,
+          jam_berangkat: jamBerangkat,
+          jam_kembali: jamKembali,
+          is_menginap: isMenginap,
+          durasi_malam: durasiMalam,
           lokasi: finalLokasi,
           keterangan: keterangan.trim() || null,
           jenis_absensi: jenisAbsensi,
-          jam_batas_berangkat: jenisAbsensi === 'BERANGKAT_KEMBALI' ? jamBatasBerangkat : null,
-          jam_batas_kembali: jenisAbsensi === 'BERANGKAT_KEMBALI' ? jamBatasKembali : null,
+          jam_batas_berangkat: jamBerangkat,
+          jam_batas_kembali: jamKembali,
           status,
         },
         participantInputs
@@ -247,7 +265,7 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
               )}
             </div>
 
-            {/* Jenis Absensi */}
+            {/* Model Absensi: 3 Pilihan Resmi */}
             <div>
               <label className="block text-xs font-bold text-slate-700 mb-1">
                 Model Absensi Kegiatan <span className="text-rose-500">*</span>
@@ -257,51 +275,16 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
                 onChange={(e) => setJenisAbsensi(e.target.value as SpecialEventAttendanceType)}
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-purple-500 focus:outline-hidden font-medium"
               >
-                <option value="BERANGKAT_KEMBALI">
-                  BERANGKAT + KEMBALI (Cocok untuk PSG & Kegiatan Luar)
-                </option>
-                <option value="SEKALI">SEKALI (Check-In Kehadiran Saja)</option>
-                <option value="CHECKIN_CHECKOUT">CHECK-IN + CHECK-OUT (Harian)</option>
+                {SPECIAL_EVENT_ATTENDANCE_MODELS.map((model) => (
+                  <option key={model.value} value={model.value}>
+                    {model.label}
+                  </option>
+                ))}
               </select>
+              <p className="mt-1.5 text-[11px] text-purple-700 bg-purple-50 p-2 rounded-lg border border-purple-100">
+                {SPECIAL_EVENT_ATTENDANCE_MODELS.find((m) => m.value === jenisAbsensi)?.description}
+              </p>
             </div>
-
-            {/* Batas Jam Absen Berangkat & Kembali (Khusus Model BERANGKAT_KEMBALI) */}
-            {jenisAbsensi === 'BERANGKAT_KEMBALI' && (
-              <div className="sm:col-span-2 p-3.5 bg-gradient-to-r from-purple-50 to-indigo-50/60 border border-purple-200/80 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-3.5 shadow-xs">
-                <div>
-                  <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-purple-600" />
-                    Batas Jam Absen Berangkat <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={jamBatasBerangkat}
-                    onChange={(e) => setJamBatasBerangkat(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-purple-300 text-xs bg-white text-slate-800 font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
-                  />
-                  <p className="text-[10px] text-purple-700 mt-1">
-                    Peserta yang belum absen lewat jam ini berstatus <strong>Tidak Absen</strong>.
-                  </p>
-                </div>
-                <div>
-                  <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
-                    <Clock className="w-3.5 h-3.5 text-purple-600" />
-                    Batas Jam Absen Kembali ke Pondok <span className="text-rose-500">*</span>
-                  </label>
-                  <input
-                    type="time"
-                    required
-                    value={jamBatasKembali}
-                    onChange={(e) => setJamBatasKembali(e.target.value)}
-                    className="w-full px-3 py-2 rounded-lg border border-purple-300 text-xs bg-white text-slate-800 font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
-                  />
-                  <p className="text-[10px] text-purple-700 mt-1">
-                    Scan kepulangan lewat jam ini otomatis berstatus <strong>Terlambat Kembali</strong>.
-                  </p>
-                </div>
-              </div>
-            )}
 
             {/* Tanggal Mulai */}
             <div>
@@ -330,6 +313,72 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
                 className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
               />
             </div>
+
+            {/* Pengaturan Jam Berangkat & Jam Kembali */}
+            {jenisAbsensi !== 'SEKALI' ? (
+              <div
+                className={`sm:col-span-2 p-4 rounded-xl border transition-all shadow-2xs ${
+                  isMenginap
+                    ? 'bg-gradient-to-r from-purple-50 via-indigo-50/50 to-purple-50 border-purple-200'
+                    : 'bg-slate-50 border-slate-200'
+                }`}
+              >
+                <div className="flex items-center justify-between mb-3 pb-2 border-b border-purple-100/80">
+                  <div className="flex items-center gap-2">
+                    <Moon className="w-4 h-4 text-purple-600" />
+                    <span className="text-xs font-bold text-purple-950">
+                      {isMenginap
+                        ? `Kegiatan Khusus Menginap (${durasiMalam} Malam)`
+                        : 'Jadwal Berangkat dan Kembali Setiap Hari (Tanpa Menginap)'}
+                    </span>
+                  </div>
+                  {isMenginap ? (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-purple-200/80 text-purple-900 border border-purple-300">
+                      🌙 Menginap {durasiMalam} Malam
+                    </span>
+                  ) : (
+                    <span className="px-2.5 py-0.5 rounded-full text-[10px] font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200">
+                      ☀️ Harian Pulang-Pergi
+                    </span>
+                  )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
+                  <div>
+                    <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-purple-600" />
+                      Jam Berangkat <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={jamBerangkat}
+                      onChange={(e) => setJamBerangkat(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-purple-300 text-xs bg-white text-slate-800 font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+                    />
+                    <p className="text-[10px] text-purple-700 mt-1">
+                      Waktu santri/rombongan berangkat dari pondok pada <strong>{tanggalMulai}</strong>.
+                    </p>
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
+                      <Clock className="w-3.5 h-3.5 text-purple-600" />
+                      Jam Kembali ke Pondok <span className="text-rose-500">*</span>
+                    </label>
+                    <input
+                      type="time"
+                      required
+                      value={jamKembali}
+                      onChange={(e) => setJamKembali(e.target.value)}
+                      className="w-full px-3 py-2 rounded-lg border border-purple-300 text-xs bg-white text-slate-800 font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
+                    />
+                    <p className="text-[10px] text-purple-700 mt-1">
+                      Estimasi santri tiba kembali di pondok pada <strong>{tanggalSelesai}</strong>.
+                    </p>
+                  </div>
+                </div>
+              </div>
+            ) : null}
 
             {/* Lokasi */}
             <div className="sm:col-span-2">

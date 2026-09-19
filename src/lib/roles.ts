@@ -68,6 +68,17 @@ export const ROLE_DEFINITIONS: Record<UserRole, RoleInfo> = {
     description: 'Pencatatan absensi shalat berjamaah 5 waktu di masjid pesantren.',
     permissions: ['view_santri', 'manage_absensi_jamaah'],
   },
+  PETUGAS_PERIZINAN: {
+    code: 'PETUGAS_PERIZINAN',
+    displayName: 'Petugas Perizinan',
+    description: 'Fokus operasional perizinan santri: pembuatan izin, persetujuan, scan barcode kepulangan/keluar, dan monitoring batas waktu.',
+    permissions: [
+      'view_santri',
+      'manage_perizinan',
+      'scan_perizinan',
+      'view_reports_perizinan',
+    ],
+  },
 };
 
 /**
@@ -96,11 +107,11 @@ export function canAccessMenu(role: UserRole, menu: ActiveNavMenu): boolean {
     case 'absensi':
       return ['ADMIN', 'PENGURUS_ASRAMA', 'PETUGAS_SEKOLAH', 'PETUGAS_MADIN', 'PETUGAS_JAMAAH'].includes(role);
     case 'perizinan':
-      return ['ADMIN', 'PENGURUS_ASRAMA'].includes(role);
+      return ['ADMIN', 'PENGURUS_ASRAMA', 'PETUGAS_PERIZINAN'].includes(role);
     case 'kegiatan_khusus':
       return ['ADMIN', 'PENGURUS_ASRAMA'].includes(role);
     case 'laporan':
-      return ['ADMIN', 'PENGURUS_ASRAMA', 'PETUGAS_SEKOLAH', 'PETUGAS_MADIN', 'PETUGAS_JAMAAH'].includes(role);
+      return ['ADMIN', 'PENGURUS_ASRAMA', 'PETUGAS_PERIZINAN', 'PETUGAS_SEKOLAH', 'PETUGAS_MADIN', 'PETUGAS_JAMAAH'].includes(role);
     case 'pengaturan':
       return false; // Hanya SUPER_ADMIN
     default:
@@ -116,6 +127,8 @@ export function getRoleBadgeClass(role: UserRole): string {
       return 'bg-blue-100 text-blue-800 border-blue-200';
     case 'PENGURUS_ASRAMA':
       return 'bg-emerald-100 text-emerald-800 border-emerald-200';
+    case 'PETUGAS_PERIZINAN':
+      return 'bg-indigo-100 text-indigo-800 border-indigo-200';
     case 'PETUGAS_SEKOLAH':
       return 'bg-amber-100 text-amber-800 border-amber-200';
     case 'PETUGAS_MADIN':

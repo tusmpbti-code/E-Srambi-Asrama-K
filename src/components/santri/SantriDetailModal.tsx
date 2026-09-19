@@ -29,6 +29,8 @@ import {
   SantriPermission,
   SpecialAttendanceRecord,
   SpecialEventParticipant,
+  getSantriKamarText,
+  getSantriMadinText,
 } from '../../types';
 import { getSantriAttendanceHistory } from '../../services/attendanceService';
 import { getSantriPermissionsHistory } from '../../services/permissionService';
@@ -209,12 +211,12 @@ export const SantriDetailModal: React.FC<SantriDetailModalProps> = ({
                 </div>
                 <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50">
                   <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Kamar Asrama</div>
-                  <div className="text-base font-bold text-zinc-900">{santri.kamar?.nama_kamar || 'Belum Terdaftar'}</div>
-                  <div className="text-xs text-zinc-500 mt-0.5">{santri.kamar?.gedung || '-'}</div>
+                  <div className="text-base font-bold text-zinc-900">{getSantriKamarText(santri) ? `Kamar ${getSantriKamarText(santri)}` : 'Belum Terdaftar'}</div>
+                  <div className="text-xs text-zinc-500 mt-0.5">Asrama Santri</div>
                 </div>
                 <div className="p-4 rounded-xl border border-zinc-200 bg-zinc-50/50">
-                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Rayon / Wilayah</div>
-                  <div className="text-base font-bold text-zinc-900">{santri.rayon || 'Pusat'}</div>
+                  <div className="text-xs font-semibold text-zinc-500 uppercase tracking-wider mb-1">Kelas Madin</div>
+                  <div className="text-base font-bold text-zinc-900">{getSantriMadinText(santri) || '-'}</div>
                   <div className="text-xs text-zinc-500 mt-0.5">Jenis Kelamin: {santri.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</div>
                 </div>
               </div>

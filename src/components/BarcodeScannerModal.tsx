@@ -15,7 +15,7 @@ import {
   Sparkles,
 } from 'lucide-react';
 import { findSantriByBarcode } from '../services/santriService';
-import { Santri } from '../types';
+import { Santri, getSantriKamarText, getSantriMadinText } from '../types';
 
 interface BarcodeScannerModalProps {
   isOpen: boolean;
@@ -192,16 +192,16 @@ export const BarcodeScannerModal: React.FC<BarcodeScannerModalProps> = ({
                     <span className="font-medium">{result.kelas?.nama_kelas || '-'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Kamar Asrama:</span>
-                    <span className="font-medium">{result.kamar?.nama_kamar || '-'}</span>
+                    <span className="text-[10px] text-slate-400 block">Kamar:</span>
+                    <span className="font-medium">{getSantriKamarText(result) || '-'}</span>
                   </div>
                   <div>
                     <span className="text-[10px] text-slate-400 block">Jenis Kelamin:</span>
                     <span>{result.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}</span>
                   </div>
                   <div>
-                    <span className="text-[10px] text-slate-400 block">Rayon:</span>
-                    <span>{result.rayon || '-'}</span>
+                    <span className="text-[10px] text-slate-400 block">Kelas Madin:</span>
+                    <span>{getSantriMadinText(result) || '-'}</span>
                   </div>
                 </div>
 

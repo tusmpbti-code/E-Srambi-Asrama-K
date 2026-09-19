@@ -33,6 +33,8 @@ import {
   AttendanceSessionStats,
   Kelas,
   Kamar,
+  getSantriKamarText,
+  getSantriMadinText,
 } from '../types';
 import { useAuth } from '../context/AuthContext';
 import {
@@ -377,7 +379,11 @@ export const AbsensiView: React.FC = () => {
 
       const matchStatus = statusFilter === 'SEMUA' || r.status === statusFilter;
       const matchKelas = kelasFilter === 'SEMUA' || r.santri?.kelas_id === kelasFilter;
-      const matchKamar = kamarFilter === 'SEMUA' || r.santri?.kamar_id === kamarFilter;
+      const santriKamar = getSantriKamarText(r.santri);
+      const matchKamar =
+        kamarFilter === 'SEMUA' ||
+        r.santri?.kamar_id === kamarFilter ||
+        santriKamar === kamarFilter;
 
       return matchSearch && matchStatus && matchKelas && matchKamar;
     });
@@ -392,7 +398,11 @@ export const AbsensiView: React.FC = () => {
         s.nis?.toLowerCase().includes(searchQuery.toLowerCase());
 
       const matchKelas = kelasFilter === 'SEMUA' || s.kelas_id === kelasFilter;
-      const matchKamar = kamarFilter === 'SEMUA' || s.kamar_id === kamarFilter;
+      const santriKamar = getSantriKamarText(s);
+      const matchKamar =
+        kamarFilter === 'SEMUA' ||
+        s.kamar_id === kamarFilter ||
+        santriKamar === kamarFilter;
 
       return matchSearch && matchKelas && matchKamar;
     });
@@ -745,7 +755,7 @@ export const AbsensiView: React.FC = () => {
           >
             <option value="SEMUA">Semua Kamar</option>
             {kamarList.map((km) => (
-              <option key={km.id} value={km.id}>
+              <option key={km.id} value={km.nama_kamar}>
                 {km.nama_kamar}
               </option>
             ))}
@@ -791,7 +801,7 @@ export const AbsensiView: React.FC = () => {
                           {item.santri?.kelas?.nama_kelas || '-'}
                         </div>
                         <div className="text-[11px] text-slate-500">
-                          {item.santri?.kamar?.nama_kamar || '-'}
+                          {getSantriKamarText(item.santri)}
                         </div>
                       </td>
                       <td className="py-3 px-3 font-mono font-semibold text-slate-700">
@@ -888,7 +898,7 @@ export const AbsensiView: React.FC = () => {
                           {santri.kelas?.nama_kelas || '-'}
                         </div>
                         <div className="text-[11px] text-slate-500">
-                          {santri.kamar?.nama_kamar || '-'}
+                          {getSantriKamarText(santri)}
                         </div>
                       </td>
                       <td className="py-3 px-3">

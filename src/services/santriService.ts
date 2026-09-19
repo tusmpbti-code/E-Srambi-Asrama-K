@@ -44,8 +44,10 @@ export const INITIAL_SANTRI: Santri[] = [
     nis: 'NIS2026001',
     jenis_kelamin: 'L',
     kelas_id: 'b0000000-0000-0000-0000-000000000001',
+    kamar: 'Abu Bakar 1',
     kamar_id: 'a0000000-0000-0000-0000-000000000001',
-    rayon: 'Surabaya',
+    kelas_madin: 'Ula 1',
+    rayon: 'Ula 1',
     status_santri: 'Aktif',
     barcode_value: 'YYS202600123',
     nama_wali: 'H. Bambang Sulistyo',
@@ -61,8 +63,10 @@ export const INITIAL_SANTRI: Santri[] = [
     nis: 'NIS2026002',
     jenis_kelamin: 'L',
     kelas_id: 'b0000000-0000-0000-0000-000000000001',
+    kamar: 'Abu Bakar 1',
     kamar_id: 'a0000000-0000-0000-0000-000000000001',
-    rayon: 'Sidoarjo',
+    kelas_madin: 'Ula 1',
+    rayon: 'Ula 1',
     status_santri: 'Aktif',
     barcode_value: 'YYS202600124',
     nama_wali: 'Ir. H. Gunawan Wibisono',
@@ -78,8 +82,10 @@ export const INITIAL_SANTRI: Santri[] = [
     nis: 'NIS2026003',
     jenis_kelamin: 'L',
     kelas_id: 'b0000000-0000-0000-0000-000000000002',
+    kamar: 'Abu Bakar 2',
     kamar_id: 'a0000000-0000-0000-0000-000000000002',
-    rayon: 'Gresik',
+    kelas_madin: 'Ula 2',
+    rayon: 'Ula 2',
     status_santri: 'Aktif',
     barcode_value: 'YYS202600125',
     nama_wali: 'K.H. Masduki Syahid',
@@ -95,8 +101,10 @@ export const INITIAL_SANTRI: Santri[] = [
     nis: 'NIS2026004',
     jenis_kelamin: 'L',
     kelas_id: 'b0000000-0000-0000-0000-000000000003',
+    kamar: 'Utsman 1',
     kamar_id: 'a0000000-0000-0000-0000-000000000003',
-    rayon: 'Malang',
+    kelas_madin: 'Wustho 1',
+    rayon: 'Wustho 1',
     status_santri: 'Izin',
     barcode_value: 'YYS202600126',
     nama_wali: 'Drs. Supriyadi, M.M.',
@@ -112,8 +120,10 @@ export const INITIAL_SANTRI: Santri[] = [
     nis: 'NIS2026005',
     jenis_kelamin: 'P',
     kelas_id: 'b0000000-0000-0000-0000-000000000001',
+    kamar: 'Khadijah 1',
     kamar_id: 'a0000000-0000-0000-0000-000000000004',
-    rayon: 'Kediri',
+    kelas_madin: 'Ula 1',
+    rayon: 'Ula 1',
     status_santri: 'Aktif',
     barcode_value: 'YYS202600127',
     nama_wali: 'Hj. Siti Rohmah',
@@ -129,8 +139,10 @@ export const INITIAL_SANTRI: Santri[] = [
     nis: 'NIS2026006',
     jenis_kelamin: 'P',
     kelas_id: 'b0000000-0000-0000-0000-000000000002',
+    kamar: 'Khadijah 2',
     kamar_id: 'a0000000-0000-0000-0000-000000000005',
-    rayon: 'Jombang',
+    kelas_madin: 'Ula 2',
+    rayon: 'Ula 2',
     status_santri: 'Sakit',
     barcode_value: 'YYS202600128',
     nama_wali: 'H. Moch. Yahya',
@@ -151,9 +163,15 @@ let memoryKegiatan: Kegiatan[] = [...INITIAL_KEGIATAN];
  * Attach joined relation names to Santri records
  */
 function enrichSantri(item: Santri, kamars: Kamar[], kelass: Kelas[]): Santri {
+  const kamarVal = typeof item.kamar === 'string' && item.kamar.trim()
+    ? item.kamar.trim()
+    : (item.kamar as any)?.nama_kamar || kamars.find((k) => k.id === item.kamar_id)?.nama_kamar || item.kamar || null;
+
   return {
     ...item,
-    kamar: kamars.find((k) => k.id === item.kamar_id) || null,
+    kamar: kamarVal,
+    kelas_madin: item.kelas_madin || item.rayon || null,
+    rayon: item.kelas_madin || item.rayon || null,
     kelas: kelass.find((k) => k.id === item.kelas_id) || null,
   };
 }
@@ -180,14 +198,17 @@ export async function findSantriByBarcode(rawBarcode: string): Promise<Santri | 
         .from('santri')
         .select(`
           *,
-          kamar:kamar_id (*),
           kelas:kelas_id (*)
         `)
-        .or(`barcode_value.eq.${cleanBarcode},id_yys.eq.${targetIdYys}`)
+        .or(`barcode_value.ilike.${cleanBarcode},id_yys.ilike.${cleanBarcode},nis.ilike.${cleanBarcode}`)
         .maybeSingle();
 
       if (!error && data) {
-        return data as Santri;
+        return {
+          ...data,
+          kelas_madin: data.kelas_madin || data.rayon,
+          rayon: data.kelas_madin || data.rayon,
+        } as Santri;
       }
     } catch {
       // fallback to memory
@@ -198,7 +219,8 @@ export async function findSantriByBarcode(rawBarcode: string): Promise<Santri | 
   const found = memorySantri.find(
     (s) =>
       s.barcode_value.toLowerCase() === cleanBarcode.toLowerCase() ||
-      s.id_yys.toLowerCase() === targetIdYys.toLowerCase()
+      s.id_yys.toLowerCase() === targetIdYys.toLowerCase() ||
+      (s.nis && s.nis.toLowerCase() === cleanBarcode.toLowerCase())
   );
 
   return found ? enrichSantri(found, memoryKamar, memoryKelas) : null;
@@ -219,6 +241,9 @@ export interface SantriFilterParams {
   query?: string;
   kelasId?: string;
   kamarId?: string;
+  kamar?: string;
+  kelasMadin?: string;
+  rayon?: string;
   status?: string;
   gender?: string;
 }
@@ -228,8 +253,8 @@ export async function getSantriList(filters?: SantriFilterParams): Promise<Santr
     try {
       let query = supabase.from('santri').select(`
         *,
-        kamar:kamar_id (*),
-        kelas:kelas_id (*)
+        kelas:kelas_id (*),
+        kamar_rel:kamar_id (*)
       `);
 
       if (filters?.query) {
@@ -239,8 +264,16 @@ export async function getSantriList(filters?: SantriFilterParams): Promise<Santr
       if (filters?.kelasId) {
         query = query.eq('kelas_id', filters.kelasId);
       }
-      if (filters?.kamarId) {
-        query = query.eq('kamar_id', filters.kamarId);
+      if (filters?.kamar) {
+        query = query.or(`kamar.eq.${filters.kamar},kamar_id.eq.${filters.kamar}`);
+      } else if (filters?.kamarId && filters.kamarId !== 'SEMUA') {
+        query = query.or(`kamar.eq.${filters.kamarId},kamar_id.eq.${filters.kamarId}`);
+      }
+      if (filters?.kelasMadin || filters?.rayon) {
+        const madinVal = filters.kelasMadin || filters.rayon;
+        if (madinVal && madinVal !== 'SEMUA') {
+          query = query.or(`kelas_madin.eq.${madinVal},rayon.eq.${madinVal}`);
+        }
       }
       if (filters?.status) {
         query = query.eq('status_santri', filters.status);
@@ -253,7 +286,18 @@ export async function getSantriList(filters?: SantriFilterParams): Promise<Santr
 
       const { data, error } = await query;
       if (!error && data) {
-        return data as Santri[];
+        return (data as any[]).map((row) => {
+          const resolvedKamar =
+            (typeof row.kamar === 'string' && row.kamar.trim())
+              ? row.kamar.trim()
+              : (row.kamar_rel?.nama_kamar || (isValidUuid(row.kamar_id) ? null : row.kamar_id) || null);
+          return {
+            ...row,
+            kamar: resolvedKamar,
+            kelas_madin: row.kelas_madin || row.rayon,
+            rayon: row.kelas_madin || row.rayon,
+          };
+        }) as Santri[];
       }
     } catch {
       // fallback to memory
@@ -276,8 +320,24 @@ export async function getSantriList(filters?: SantriFilterParams): Promise<Santr
   if (filters?.kelasId) {
     results = results.filter((s) => s.kelas_id === filters.kelasId);
   }
-  if (filters?.kamarId) {
-    results = results.filter((s) => s.kamar_id === filters.kamarId);
+  if (filters?.kamar) {
+    results = results.filter(
+      (s) => (typeof s.kamar === 'string' ? s.kamar : (s.kamar as any)?.nama_kamar) === filters.kamar
+    );
+  } else if (filters?.kamarId && filters.kamarId !== 'SEMUA') {
+    results = results.filter(
+      (s) =>
+        s.kamar_id === filters.kamarId ||
+        (typeof s.kamar === 'string' ? s.kamar : (s.kamar as any)?.nama_kamar) === filters.kamarId
+    );
+  }
+  if (filters?.kelasMadin || filters?.rayon) {
+    const madinVal = filters.kelasMadin || filters.rayon;
+    if (madinVal && madinVal !== 'SEMUA') {
+      results = results.filter(
+        (s) => s.kelas_madin === madinVal || s.rayon === madinVal
+      );
+    }
   }
   if (filters?.status) {
     results = results.filter((s) => s.status_santri === filters.status);
@@ -297,15 +357,18 @@ export async function getSantriByBarcode(code: string): Promise<Santri | null> {
         .from('santri')
         .select(`
           *,
-          kamar:kamar_id (*),
           kelas:kelas_id (*)
         `)
-        .or(`barcode_value.eq.${clean},id_yys.eq.${clean},nis.eq.${clean}`)
+        .or(`barcode_value.ilike.${clean},id_yys.ilike.${clean},nis.ilike.${clean}`)
         .limit(1)
         .maybeSingle();
 
       if (!error && data) {
-        return data as Santri;
+        return {
+          ...data,
+          kelas_madin: data.kelas_madin || data.rayon,
+          rayon: data.kelas_madin || data.rayon,
+        } as Santri;
       }
     } catch {
       // fallback
@@ -348,6 +411,8 @@ export async function createSantri(
   // Validate ID YYS uniqueness
   const cleanIdYys = input.id_yys.trim().toUpperCase();
   const cleanBarcode = input.barcode_value ? input.barcode_value.trim() : cleanIdYys;
+  const cleanKamar = input.kamar ? String(input.kamar).trim() : null;
+  const cleanMadin = (input.kelas_madin || input.rayon)?.trim() || null;
 
   if (isSupabaseConfigured()) {
     try {
@@ -360,8 +425,10 @@ export async function createSantri(
             nis: input.nis?.trim() || null,
             jenis_kelamin: input.jenis_kelamin,
             kelas_id: isValidUuid(input.kelas_id) ? input.kelas_id : null,
+            kamar: cleanKamar,
             kamar_id: isValidUuid(input.kamar_id) ? input.kamar_id : null,
-            rayon: input.rayon?.trim() || null,
+            kelas_madin: cleanMadin,
+            rayon: cleanMadin,
             status_santri: input.status_santri,
             barcode_value: cleanBarcode,
             nama_wali: input.nama_wali?.trim() || null,
@@ -371,7 +438,6 @@ export async function createSantri(
         ])
         .select(`
           *,
-          kamar:kamar_id (*),
           kelas:kelas_id (*)
         `)
         .single();
@@ -379,7 +445,14 @@ export async function createSantri(
       if (error) {
         return { data: null, error: formatDbError(error.message) };
       }
-      return { data: data as Santri, error: null };
+      return {
+        data: {
+          ...data,
+          kelas_madin: data.kelas_madin || data.rayon,
+          rayon: data.kelas_madin || data.rayon,
+        } as Santri,
+        error: null,
+      };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal menyimpan santri ke database';
       return { data: null, error: formatDbError(msg) };
@@ -397,6 +470,9 @@ export async function createSantri(
     id: `d-${Date.now()}`,
     id_yys: cleanIdYys,
     barcode_value: cleanBarcode,
+    kamar: cleanKamar,
+    kelas_madin: cleanMadin,
+    rayon: cleanMadin,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   };
@@ -411,8 +487,10 @@ export interface ImportSantriRow {
   nis?: string;
   jenis_kelamin: 'L' | 'P';
   kelas_id?: string | null;
+  kamar?: string | null;
   kamar_id?: string | null;
-  rayon?: string;
+  kelas_madin?: string | null;
+  rayon?: string | null;
   status_santri?: StatusSantri;
   barcode_value?: string;
   nama_wali?: string;
@@ -449,7 +527,9 @@ export async function importSantriBatch(
     nis: string | null;
     jenis_kelamin: 'L' | 'P';
     kelas_id: string | null;
+    kamar: string | null;
     kamar_id: string | null;
+    kelas_madin: string | null;
     rayon: string | null;
     status_santri: StatusSantri;
     barcode_value: string;
@@ -499,14 +579,19 @@ export async function importSantriBatch(
       status = rawStatus as StatusSantri;
     }
 
+    const cleanKamar = (row.kamar || '').trim() || null;
+    const cleanMadin = (row.kelas_madin || row.rayon || '').trim() || null;
+
     validPayloads.push({
       id_yys: cleanId,
       nama: cleanNama,
       nis: row.nis?.trim() || null,
       jenis_kelamin: jk,
       kelas_id: isValidUuid(row.kelas_id) ? row.kelas_id! : null,
+      kamar: cleanKamar,
       kamar_id: isValidUuid(row.kamar_id) ? row.kamar_id! : null,
-      rayon: row.rayon?.trim() || null,
+      kelas_madin: cleanMadin,
+      rayon: cleanMadin,
       status_santri: status,
       barcode_value: row.barcode_value?.trim() || cleanId,
       nama_wali: row.nama_wali?.trim() || null,
@@ -520,26 +605,86 @@ export async function importSantriBatch(
     return result;
   }
 
-  // If Supabase is configured, upsert into 'santri' in chunks of 50
+  // Auto-sync unique room names to public.kamar so dropdown filters and references are updated
+  const uniqueRoomNames = Array.from(
+    new Set(
+      validPayloads
+        .map((p) => p.kamar)
+        .filter((k): k is string => Boolean(k && k.trim()))
+    )
+  );
+
+  // If Supabase is configured, upsert rooms first then santri
   if (isSupabaseConfigured()) {
+    if (uniqueRoomNames.length > 0) {
+      try {
+        const roomUpserts = uniqueRoomNames.map((rName) => ({
+          nama_kamar: rName,
+          gedung: 'Asrama Pondok',
+          kapasitas: 20,
+        }));
+        await supabase.from('kamar').upsert(roomUpserts, { onConflict: 'nama_kamar' });
+
+        const { data: dbRooms } = await supabase
+          .from('kamar')
+          .select('id, nama_kamar')
+          .in('nama_kamar', uniqueRoomNames);
+
+        if (dbRooms && dbRooms.length > 0) {
+          const roomMap = new Map<string, string>();
+          dbRooms.forEach((rm) => roomMap.set(rm.nama_kamar.toLowerCase().trim(), rm.id));
+          validPayloads.forEach((p) => {
+            if (p.kamar && !p.kamar_id) {
+              const matchedId = roomMap.get(p.kamar.toLowerCase().trim());
+              if (matchedId) {
+                p.kamar_id = matchedId;
+              }
+            }
+          });
+        }
+      } catch (kamarErr) {
+        console.warn('Sync kamar to master table warning:', kamarErr);
+      }
+    }
+
     const CHUNK_SIZE = 50;
     for (let i = 0; i < validPayloads.length; i += CHUNK_SIZE) {
       const chunk = validPayloads.slice(i, i + CHUNK_SIZE);
-      const dbPayloads = chunk.map(({ originalIndex, ...rest }) => rest);
+      let dbPayloads = chunk.map(({ originalIndex, ...rest }) => rest);
 
       try {
-        const { data, error } = await supabase
+        let { data, error } = await supabase
           .from('santri')
           .upsert(dbPayloads, { onConflict: 'id_yys' })
           .select('id, id_yys');
+
+        // If error occurred because column 'kamar' does not exist yet in Supabase, retry without 'kamar'
+        if (error && error.message && error.message.toLowerCase().includes('kamar') && error.message.toLowerCase().includes('does not exist')) {
+          console.warn('Column kamar does not exist yet on public.santri, retrying with kamar_id only.');
+          const fallbackPayloads = dbPayloads.map(({ kamar, ...rest }) => rest);
+          const fallbackRes = await supabase
+            .from('santri')
+            .upsert(fallbackPayloads, { onConflict: 'id_yys' })
+            .select('id, id_yys');
+          data = fallbackRes.data;
+          error = fallbackRes.error;
+        }
 
         if (error) {
           // If bulk upsert failed, try item-by-item to salvage valid records
           for (const item of chunk) {
             const { originalIndex, ...singlePayload } = item;
-            const { error: singleError } = await supabase
+            let { error: singleError } = await supabase
               .from('santri')
               .upsert([singlePayload], { onConflict: 'id_yys' });
+
+            if (singleError && singleError.message && singleError.message.toLowerCase().includes('kamar') && singleError.message.toLowerCase().includes('does not exist')) {
+              const { kamar, ...fallbackSingle } = singlePayload;
+              const retryRes = await supabase
+                .from('santri')
+                .upsert([fallbackSingle], { onConflict: 'id_yys' });
+              singleError = retryRes.error;
+            }
 
             if (singleError) {
               result.failedCount++;
@@ -576,10 +721,42 @@ export async function importSantriBatch(
       });
     }
 
+    // Always synchronize in-memory state with imported santri and rooms
+    validPayloads.forEach((item) => {
+      const existingIdx = memorySantri.findIndex(
+        (s) => s.id_yys.toUpperCase() === item.id_yys.toUpperCase()
+      );
+      if (existingIdx >= 0) {
+        memorySantri[existingIdx] = {
+          ...memorySantri[existingIdx],
+          ...item,
+          updated_at: new Date().toISOString(),
+        };
+      } else {
+        memorySantri.unshift({
+          id: `d-${Date.now()}-${Math.random().toString(36).substr(2, 6)}`,
+          ...item,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        });
+      }
+    });
+
+    uniqueRoomNames.forEach((rName) => {
+      if (!memoryKamar.some((mk) => mk.nama_kamar.toLowerCase() === rName.toLowerCase())) {
+        memoryKamar.push({
+          id: rName,
+          nama_kamar: rName,
+          gedung: 'Asrama Pondok',
+          kapasitas: 20,
+        });
+      }
+    });
+
     return result;
   }
 
-  // Memory fallback
+  // Memory fallback when Supabase is not configured
   validPayloads.forEach((item) => {
     const existingIdx = memorySantri.findIndex(
       (s) => s.id_yys.toUpperCase() === item.id_yys.toUpperCase()
@@ -601,6 +778,17 @@ export async function importSantriBatch(
     result.successCount++;
   });
 
+  uniqueRoomNames.forEach((rName) => {
+    if (!memoryKamar.some((mk) => mk.nama_kamar.toLowerCase() === rName.toLowerCase())) {
+      memoryKamar.push({
+        id: rName,
+        nama_kamar: rName,
+        gedung: 'Asrama Pondok',
+        kapasitas: 20,
+      });
+    }
+  });
+
   return result;
 }
 
@@ -614,7 +802,6 @@ export async function updateSantri(
         nama: updates.nama,
         nis: updates.nis,
         jenis_kelamin: updates.jenis_kelamin,
-        rayon: updates.rayon,
         status_santri: updates.status_santri,
         barcode_value: updates.barcode_value,
         nama_wali: updates.nama_wali,
@@ -626,8 +813,16 @@ export async function updateSantri(
       if (updates.kelas_id !== undefined) {
         payload.kelas_id = isValidUuid(updates.kelas_id) ? updates.kelas_id : null;
       }
+      if (updates.kamar !== undefined) {
+        payload.kamar = updates.kamar ? String(updates.kamar).trim() : null;
+      }
       if (updates.kamar_id !== undefined) {
         payload.kamar_id = isValidUuid(updates.kamar_id) ? updates.kamar_id : null;
+      }
+      if (updates.kelas_madin !== undefined || updates.rayon !== undefined) {
+        const m = (updates.kelas_madin || updates.rayon)?.trim() || null;
+        payload.kelas_madin = m;
+        payload.rayon = m;
       }
 
       const { data, error } = await supabase
@@ -636,13 +831,19 @@ export async function updateSantri(
         .eq('id', id)
         .select(`
           *,
-          kamar:kamar_id (*),
           kelas:kelas_id (*)
         `)
         .single();
 
       if (error) return { data: null, error: formatDbError(error.message) };
-      return { data: data as Santri, error: null };
+      return {
+        data: {
+          ...data,
+          kelas_madin: data.kelas_madin || data.rayon,
+          rayon: data.kelas_madin || data.rayon,
+        } as Santri,
+        error: null,
+      };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal memperbarui santri';
       return { data: null, error: formatDbError(msg) };
@@ -682,15 +883,299 @@ export async function deleteSantri(id: string): Promise<{ success: boolean; erro
 // ==============================================================================
 
 export async function getKamarList(): Promise<Kamar[]> {
+  const roomMap = new Map<string, Kamar>();
+
   if (isSupabaseConfigured()) {
     try {
-      const { data, error } = await supabase.from('kamar').select('*').order('nama_kamar');
-      if (!error && data) return data as Kamar[];
+      // 1. Ambil dari master tabel public.kamar
+      const { data: masterKamars, error: masterErr } = await supabase
+        .from('kamar')
+        .select('id, nama_kamar, gedung, kapasitas')
+        .order('nama_kamar');
+
+      if (!masterErr && masterKamars && masterKamars.length > 0) {
+        masterKamars.forEach((km: any) => {
+          if (km.nama_kamar && typeof km.nama_kamar === 'string' && km.nama_kamar.trim()) {
+            const clean = km.nama_kamar.trim();
+            roomMap.set(clean.toLowerCase(), {
+              id: km.id || clean,
+              nama_kamar: clean,
+              gedung: km.gedung || 'Asrama Pondok',
+              kapasitas: km.kapasitas || 20,
+            });
+          }
+        });
+      }
+
+      // 2. Ambil juga dari kolom kamar langsung tabel santri
+      const { data: santriKamars } = await supabase
+        .from('santri')
+        .select('kamar')
+        .not('kamar', 'is', null);
+
+      if (santriKamars && santriKamars.length > 0) {
+        santriKamars.forEach((r: any) => {
+          if (r.kamar && typeof r.kamar === 'string' && r.kamar.trim()) {
+            const clean = r.kamar.trim();
+            if (!roomMap.has(clean.toLowerCase())) {
+              roomMap.set(clean.toLowerCase(), {
+                id: clean,
+                nama_kamar: clean,
+                gedung: 'Asrama Pondok',
+                kapasitas: 20,
+              });
+            }
+          }
+        });
+      }
     } catch {
       // fallback
     }
   }
+
+  // 3. Tambahkan juga dari memori/in-memory kamar & santri
+  memoryKamar.forEach((km) => {
+    if (km.nama_kamar && km.nama_kamar.trim()) {
+      const clean = km.nama_kamar.trim();
+      if (!roomMap.has(clean.toLowerCase())) {
+        roomMap.set(clean.toLowerCase(), {
+          id: km.id || clean,
+          nama_kamar: clean,
+          gedung: km.gedung || 'Asrama Pondok',
+          kapasitas: km.kapasitas || 20,
+        });
+      }
+    }
+  });
+
+  memorySantri.forEach((s) => {
+    const km = typeof s.kamar === 'string' ? s.kamar : (s.kamar as any)?.nama_kamar;
+    if (km && km.trim()) {
+      const clean = km.trim();
+      if (!roomMap.has(clean.toLowerCase())) {
+        roomMap.set(clean.toLowerCase(), {
+          id: clean,
+          nama_kamar: clean,
+          gedung: 'Asrama Pondok',
+          kapasitas: 20,
+        });
+      }
+    }
+  });
+
+  if (roomMap.size > 0) {
+    return Array.from(roomMap.values()).sort((a, b) =>
+      a.nama_kamar.localeCompare(b.nama_kamar, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }
+
   return memoryKamar;
+}
+
+/**
+ * Mendapatkan daftar unik Kelas Madin dari data santri
+ */
+export async function getKelasMadinList(): Promise<string[]> {
+  const madinSet = new Set<string>();
+
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase
+        .from('santri')
+        .select('kelas_madin, rayon');
+
+      if (!error && data && data.length > 0) {
+        data.forEach((r: any) => {
+          const val = r.kelas_madin || r.rayon;
+          if (val && typeof val === 'string' && val.trim()) {
+            madinSet.add(val.trim());
+          }
+        });
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  memorySantri.forEach((s) => {
+    const val = s.kelas_madin || s.rayon;
+    if (val && typeof val === 'string' && val.trim()) {
+      madinSet.add(val.trim());
+    }
+  });
+
+  return Array.from(madinSet).sort();
+}
+
+/**
+ * Normalisasi string nama kamar untuk pencocokan cerdas
+ * Menghilangkan prefix seperti 'kamar', 'kmr', 'km', spasi, tanda hubung, dan padding nol
+ */
+export function normalizeKamarName(name: string): string {
+  if (!name) return '';
+  return name
+    .toLowerCase()
+    .replace(/^(kamar|kmr\.?|km\.?|room)\s*/i, '')
+    .replace(/[^a-z0-9]/g, '')
+    .replace(/0+([1-9])/g, '$1')
+    .trim();
+}
+
+/**
+ * Pencocokan cerdas antara nama kamar di berkas upload dengan master kamar di Supabase
+ */
+export function matchKamarSmart(
+  rawKamar: string,
+  kamarList: Kamar[]
+): { kamar?: Kamar; matchType: 'exact' | 'normalized' | 'fuzzy' | 'none' } {
+  if (!rawKamar || !rawKamar.trim()) return { matchType: 'none' };
+  const trimmed = rawKamar.trim();
+  const lower = trimmed.toLowerCase();
+
+  // 1. Exact match (case insensitive)
+  const exact = kamarList.find((k) => k.nama_kamar.toLowerCase() === lower);
+  if (exact) return { kamar: exact, matchType: 'exact' };
+
+  // 2. Normalized match (e.g. "Kamar A-01" vs "A-1" vs "Kmr A1")
+  const normRaw = normalizeKamarName(trimmed);
+  if (normRaw) {
+    const norm = kamarList.find((k) => normalizeKamarName(k.nama_kamar) === normRaw);
+    if (norm) return { kamar: norm, matchType: 'normalized' };
+  }
+
+  // 3. Substring match
+  const sub = kamarList.find((k) => {
+    const kLower = k.nama_kamar.toLowerCase();
+    return kLower.includes(lower) || lower.includes(kLower);
+  });
+  if (sub) return { kamar: sub, matchType: 'fuzzy' };
+
+  // 4. Normalized substring
+  if (normRaw && normRaw.length >= 2) {
+    const normSub = kamarList.find((k) => {
+      const kNorm = normalizeKamarName(k.nama_kamar);
+      return kNorm && (kNorm.includes(normRaw) || normRaw.includes(kNorm));
+    });
+    if (normSub) return { kamar: normSub, matchType: 'fuzzy' };
+  }
+
+  return { matchType: 'none' };
+}
+
+/**
+ * Tambah Kamar Baru ke Supabase / Memory
+ */
+export async function createKamar(
+  input: {
+    nama_kamar: string;
+    gedung: string;
+    kapasitas?: number;
+    jenis_kelamin?: 'L' | 'P';
+    keterangan?: string | null;
+  },
+  userEmail?: string
+): Promise<{ success: boolean; data?: Kamar; error?: string }> {
+  const cleanNama = input.nama_kamar.trim();
+  const cleanGedung = input.gedung.trim() || 'Gedung Asrama';
+  const kapasitas = input.kapasitas && input.kapasitas > 0 ? input.kapasitas : 8;
+  const jk = input.jenis_kelamin === 'P' ? 'P' : 'L';
+
+  if (!cleanNama) {
+    return { success: false, error: 'Nama kamar wajib diisi' };
+  }
+
+  // Cek apakah sudah ada di memory
+  const existingMem = memoryKamar.find((k) => k.nama_kamar.toLowerCase() === cleanNama.toLowerCase());
+  if (existingMem) {
+    return { success: true, data: existingMem };
+  }
+
+  const newKamar: Kamar = {
+    id: `kamar-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+    nama_kamar: cleanNama,
+    gedung: cleanGedung,
+    kapasitas,
+    jenis_kelamin: jk,
+    keterangan: input.keterangan || null,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const payload: Record<string, any> = {
+        nama_kamar: cleanNama,
+        gedung: cleanGedung,
+        kapasitas,
+        jenis_kelamin: jk,
+      };
+      if (input.keterangan) payload.keterangan = input.keterangan;
+
+      const { data, error } = await supabase.from('kamar').insert([payload]).select().single();
+      if (!error && data) {
+        memoryKamar.push(data as Kamar);
+        await logAudit({
+          action: 'CREATE_KAMAR',
+          tableName: 'kamar',
+          recordId: data.id,
+          userEmail,
+          details: data,
+        });
+        return { success: true, data: data as Kamar };
+      } else if (error) {
+        // Jika unique constraint triggered, ambil data kamar yang sudah ada
+        const { data: existing } = await supabase
+          .from('kamar')
+          .select('*')
+          .eq('nama_kamar', cleanNama)
+          .maybeSingle();
+        if (existing) {
+          return { success: true, data: existing as Kamar };
+        }
+        return { success: false, error: error.message };
+      }
+    } catch {
+      // fallback
+    }
+  }
+
+  memoryKamar.push(newKamar);
+  await logAudit({
+    action: 'CREATE_KAMAR',
+    tableName: 'kamar',
+    recordId: newKamar.id,
+    userEmail,
+    details: newKamar as unknown as Record<string, unknown>,
+  });
+  return { success: true, data: newKamar };
+}
+
+/**
+ * Hapus Kamar
+ */
+export async function deleteKamar(
+  id: string,
+  userEmail?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (isSupabaseConfigured()) {
+    try {
+      const { error } = await supabase.from('kamar').delete().eq('id', id);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  memoryKamar = memoryKamar.filter((k) => k.id !== id);
+  await logAudit({
+    action: 'DELETE_KAMAR',
+    tableName: 'kamar',
+    recordId: id,
+    userEmail,
+  });
+  return { success: true };
 }
 
 export async function getKelasList(): Promise<Kelas[]> {

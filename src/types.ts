@@ -9,7 +9,8 @@ export type UserRole =
   | 'PENGURUS_ASRAMA'
   | 'PETUGAS_SEKOLAH'
   | 'PETUGAS_MADIN'
-  | 'PETUGAS_JAMAAH';
+  | 'PETUGAS_JAMAAH'
+  | 'PETUGAS_PERIZINAN';
 
 export interface RoleInfo {
   code: UserRole;
@@ -35,6 +36,7 @@ export interface Kamar {
   nama_kamar: string;
   gedung: string;
   kapasitas: number;
+  jenis_kelamin?: 'L' | 'P';
   keterangan?: string | null;
   created_at?: string;
   updated_at?: string;
@@ -47,8 +49,10 @@ export interface Santri {
   nis?: string | null;
   jenis_kelamin: JenisKelamin;
   kelas_id?: string | null;
-  kamar_id?: string | null;
-  rayon?: string | null;
+  kamar?: string | any | null; // Kolom langsung kamar di tabel santri (teks sesuai data yang di-import)
+  kamar_id?: string | null; // Kompatibilitas mundur
+  kelas_madin?: string | null; // Kolom Kelas Madin (pengganti rayon)
+  rayon?: string | null; // Kompatibilitas mundur
   status_santri: StatusSantri;
   barcode_value: string; // Nilai scanner fisik (sama dengan ID YYS)
   nama_wali?: string | null;
@@ -59,8 +63,35 @@ export interface Santri {
 
   // Joined relations
   kelas?: Kelas | null;
-  kamar?: Kamar | null;
 }
+
+/**
+ * Helper untuk membaca nama kamar santri secara aman
+ */
+export const getSantriKamarText = (santri?: { kamar?: any; kamar_id?: any } | null): string => {
+  if (!santri) return '-';
+  if (typeof santri.kamar === 'string' && santri.kamar.trim()) return santri.kamar.trim();
+  if (typeof santri.kamar === 'object' && santri.kamar?.nama_kamar) {
+    return String(santri.kamar.nama_kamar).trim() || '-';
+  }
+  if (typeof santri.kamar_id === 'string' && santri.kamar_id.trim()) {
+    // Jika kamar_id bukan format UUID, berarti nama kamar teks langsung (seperti 'K - 04')
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(santri.kamar_id.trim());
+    if (!isUuid) {
+      return santri.kamar_id.trim();
+    }
+  }
+  return '-';
+};
+
+/**
+ * Helper untuk membaca nama Kelas Madin santri secara aman
+ */
+export const getSantriMadinText = (santri?: { kelas_madin?: any; rayon?: any } | null): string => {
+  if (!santri) return '-';
+  const val = santri.kelas_madin || santri.rayon;
+  return (val && String(val).trim()) ? String(val).trim() : '-';
+};
 
 export type KegiatanKategori = 'Jamaah' | 'Sekolah' | 'Madin' | 'Asrama' | 'Khusus';
 
@@ -349,9 +380,57 @@ export type ActiveNavMenu =
 // ==============================================================================
 
 export type SpecialEventAttendanceType =
+  | 'BERANGKAT_KEMBALI_MENGINAP'
   | 'SEKALI'
+  | 'BERANGKAT_KEMBALI_HARIAN'
   | 'BERANGKAT_KEMBALI'
   | 'CHECKIN_CHECKOUT';
+
+/**
+ * 3 Pilihan Model Absensi Kegiatan Khusus Resmi Sesuai Kebutuhan:
+ * 1. Berangkat dan Kembali Menginap
+ * 2. Sekali (cek kehadiran saja)
+ * 3. Berangkat dan Kembali setiap hari tanpa menginap
+ */
+export const SPECIAL_EVENT_ATTENDANCE_MODELS: {
+  value: SpecialEventAttendanceType;
+  label: string;
+  description: string;
+  isMenginap: boolean;
+}[] = [
+  {
+    value: 'BERANGKAT_KEMBALI_MENGINAP',
+    label: 'Berangkat dan Kembali Menginap',
+    description: 'Santri absen saat berangkat dan absen kembali setelah periode menginap selesai (LDKS, Kemah, PSG Menginap, Lomba Luar Kota).',
+    isMenginap: true,
+  },
+  {
+    value: 'SEKALI',
+    label: 'Sekali (cek kehadiran saja)',
+    description: 'Satu kali absen/scan untuk mencatat kehadiran kegiatan (Apel, Kajian Akbar, Ujian, Lomba Internal).',
+    isMenginap: false,
+  },
+  {
+    value: 'BERANGKAT_KEMBALI_HARIAN',
+    label: 'Berangkat dan Kembali setiap hari tanpa menginap',
+    description: 'Santri absen berangkat dan kembali setiap hari tanpa menginap di luar pondok (PSG/PKL Harian, Praktik Kerja, Pelatihan Harian).',
+    isMenginap: false,
+  },
+];
+
+export const getSpecialEventAttendanceModelLabel = (type?: SpecialEventAttendanceType | string): string => {
+  if (!type) return 'Berangkat dan Kembali Menginap';
+  if (type === 'BERANGKAT_KEMBALI_MENGINAP' || type === 'BERANGKAT_KEMBALI') {
+    return 'Berangkat dan Kembali Menginap';
+  }
+  if (type === 'SEKALI') {
+    return 'Sekali (cek kehadiran saja)';
+  }
+  if (type === 'BERANGKAT_KEMBALI_HARIAN' || type === 'CHECKIN_CHECKOUT') {
+    return 'Berangkat dan Kembali setiap hari tanpa menginap';
+  }
+  return type;
+};
 
 export type SpecialEventStatus = 'DRAFT' | 'AKTIF' | 'SELESAI' | 'DIBATALKAN';
 
@@ -361,6 +440,10 @@ export interface SpecialEvent {
   jenis_kegiatan: string; // e.g. 'PSG', 'LDKS', 'Perlombaan', 'Praktik Lapangan', 'Kegiatan Luar', 'Lainnya'
   tanggal_mulai: string;
   tanggal_selesai: string;
+  jam_berangkat?: string | null;       // Waktu jam berangkat dari pondok
+  jam_kembali?: string | null;         // Waktu jam tiba kembali di pondok
+  is_menginap?: boolean;               // Apakah kegiatan menginap (>= 1 malam)
+  durasi_malam?: number;               // Jumlah malam menginap
   lokasi: string;
   keterangan?: string | null;
   jenis_absensi: SpecialEventAttendanceType;

@@ -17,7 +17,7 @@ import {
   Clock,
   ExternalLink,
 } from 'lucide-react';
-import { Santri } from '../../types';
+import { Santri, getSantriKamarText, getSantriMadinText } from '../../types';
 import { getSantriList } from '../../services/santriService';
 
 interface GlobalSearchModalProps {
@@ -73,10 +73,10 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
       const matchNama = s.nama?.toLowerCase().includes(q);
       const matchNis = s.nis?.toLowerCase().includes(q);
       const matchKelas = s.kelas?.nama_kelas?.toLowerCase().includes(q);
-      const matchKamar = s.kamar?.nama_kamar?.toLowerCase().includes(q);
-      const matchRayon = s.rayon?.toLowerCase().includes(q);
+      const matchKamar = getSantriKamarText(s).toLowerCase().includes(q);
+      const matchMadin = getSantriMadinText(s).toLowerCase().includes(q);
 
-      return matchYys || matchBarcode || matchNama || matchNis || matchKelas || matchKamar || matchRayon;
+      return matchYys || matchBarcode || matchNama || matchNis || matchKelas || matchKamar || matchMadin;
     });
 
     // Sort by relevance (exact ID match comes first)
@@ -167,9 +167,9 @@ export const GlobalSearchModal: React.FC<GlobalSearchModalProps> = ({
                     <div className="text-xs text-zinc-500 flex items-center space-x-3 mt-0.5">
                       <span>{s.kelas?.nama_kelas || 'Kelas -'}</span>
                       <span>•</span>
-                      <span>{s.kamar?.nama_kamar || 'Kamar -'}</span>
+                      <span>{getSantriKamarText(s) ? `Kamar ${getSantriKamarText(s)}` : 'Kamar -'}</span>
                       <span>•</span>
-                      <span>Rayon: {s.rayon || 'Pusat'}</span>
+                      <span>Kelas Madin: {getSantriMadinText(s) || '-'}</span>
                     </div>
                   </div>
                 </div>

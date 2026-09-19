@@ -24,7 +24,7 @@ import {
   Image as ImageIcon,
 } from 'lucide-react';
 import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
-import { Santri } from '../types';
+import { Santri, getSantriKamarText } from '../types';
 import { playSuccessChime, playWarningChime, playErrorChime } from '../lib/sound';
 
 interface AbsensiScannerProps {
@@ -571,7 +571,7 @@ export const AbsensiScanner: React.FC<AbsensiScannerProps> = ({
                     {lastScannedSantri.kelas?.nama_kelas || 'Kelas -'}
                   </span>
                   <span className="px-2 py-0.5 rounded-md bg-white border border-black/10 font-medium">
-                    {lastScannedSantri.kamar?.nama_kamar || 'Kamar -'}
+                    {getSantriKamarText(lastScannedSantri) ? (getSantriKamarText(lastScannedSantri).startsWith('Kamar') ? getSantriKamarText(lastScannedSantri) : `Kamar ${getSantriKamarText(lastScannedSantri)}`) : 'Kamar -'}
                   </span>
                   <span
                     className={`px-2 py-0.5 rounded-full font-bold ${

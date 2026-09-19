@@ -40,7 +40,7 @@ import {
   LogOut,
   LogIn,
 } from 'lucide-react';
-import { Html5Qrcode } from 'html5-qrcode';
+import { Html5Qrcode, Html5QrcodeSupportedFormats } from 'html5-qrcode';
 import {
   SantriPermission,
   PermissionType,
@@ -51,6 +51,7 @@ import {
   Kelas,
   Kamar,
   ActiveNavMenu,
+  getSantriKamarText,
 } from '../types';
 import {
   getPermissions,
@@ -74,7 +75,7 @@ interface PerizinanViewProps {
 
 export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
   const { currentRole, profile, isConfigured } = useAuth();
-  const canManage = ['SUPER_ADMIN', 'ADMIN', 'PENGURUS_ASRAMA'].includes(currentRole);
+  const canManage = ['SUPER_ADMIN', 'ADMIN', 'PENGURUS_ASRAMA', 'PETUGAS_PERIZINAN'].includes(currentRole);
 
   // Data states
   const [permissions, setPermissions] = useState<SantriPermission[]>([]);
@@ -91,6 +92,13 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
     belumKembaliList: [],
   });
   const [loading, setLoading] = useState(true);
+
+  // Quick return barcode bar state
+  const [quickReturnBarcode, setQuickReturnBarcode] = useState('');
+
+  // ID YYS search state in Create Permission Modal
+  const [inputSearchIdYys, setInputSearchIdYys] = useState('');
+  const [idYysSearchError, setIdYysSearchError] = useState<string | null>(null);
 
   // Tab filter
   const [activeTab, setActiveTab] = useState<
@@ -123,6 +131,15 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
   const [barcodeInput, setBarcodeInput] = useState('');
   const [scanLoading, setScanLoading] = useState(false);
   const [soundEnabled, setSoundEnabled] = useState(true);
+  const [modalFeedback, setModalFeedback] = useState<{
+    type: 'success' | 'warning' | 'error';
+    title: string;
+    message: string;
+  } | null>(null);
+  const [scanningDetected, setScanningDetected] = useState<string | null>(null);
+  const isProcessingScanRef = useRef<boolean>(false);
+  const lastScannedCodeRef = useRef<string>('');
+  const lastScanTimeRef = useRef<number>(0);
   const scannerRef = useRef<Html5Qrcode | null>(null);
   const scannerContainerId = 'perizinan-camera-viewport';
 
@@ -203,7 +220,10 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
     if (filterKelas !== 'SEMUA' && p.santri?.kelas_id !== filterKelas) return false;
 
     // Kamar filter
-    if (filterKamar !== 'SEMUA' && p.santri?.kamar_id !== filterKamar) return false;
+    if (filterKamar !== 'SEMUA') {
+      const santriKamar = getSantriKamarText(p.santri);
+      if (p.santri?.kamar_id !== filterKamar && santriKamar !== filterKamar) return false;
+    }
 
     // Search query
     if (searchQuery.trim()) {
@@ -230,28 +250,34 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
       if (result.success) {
         if (result.isLate) {
           if (soundEnabled) playWarningChime();
-          setFeedback({
-            type: 'warning',
+          const fb = {
+            type: 'warning' as const,
             title: 'SANTRI KEMBALI TERLAMBAT',
             message: result.message,
-          });
+          };
+          setFeedback(fb);
+          setModalFeedback(fb);
         } else {
           if (soundEnabled) playSuccessChime();
-          setFeedback({
-            type: 'success',
-            title: 'KEPULANGAN TERCATAT',
+          const fb = {
+            type: 'success' as const,
+            title: 'KEPULANGAN TERCATAT SUKSES',
             message: result.message,
-          });
+          };
+          setFeedback(fb);
+          setModalFeedback(fb);
         }
         await loadData();
         setBarcodeInput('');
       } else {
         if (soundEnabled) playErrorChime();
-        setFeedback({
-          type: 'error',
+        const fb = {
+          type: 'error' as const,
           title: 'GAGAL CATAT KEPULANGAN',
           message: result.message,
-        });
+        };
+        setFeedback(fb);
+        setModalFeedback(fb);
       }
     } finally {
       setScanLoading(false);
@@ -262,64 +288,154 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
   const startCamera = async (mode: 'return' | 'create') => {
     setScannerMode(mode);
     setCameraActive(true);
+    setScanningDetected(null);
+    setModalFeedback(null);
+
+    // Hentikan scanner lama jika masih berjalan
+    if (scannerRef.current) {
+      try {
+        if (scannerRef.current.isScanning) {
+          await scannerRef.current.stop();
+        }
+        await scannerRef.current.clear();
+      } catch {
+        // Abaikan jika sudah dibersihkan
+      }
+      scannerRef.current = null;
+    }
 
     setTimeout(async () => {
       try {
-        const scanner = new Html5Qrcode(scannerContainerId);
+        // Konfigurasi format lengkap: 1D Barcode (CODE 128, CODE 39, EAN 13, dll) + 2D QR Code
+        const supportedFormats = [
+          Html5QrcodeSupportedFormats.CODE_128,
+          Html5QrcodeSupportedFormats.QR_CODE,
+          Html5QrcodeSupportedFormats.CODE_39,
+          Html5QrcodeSupportedFormats.EAN_13,
+          Html5QrcodeSupportedFormats.UPC_A,
+          Html5QrcodeSupportedFormats.CODABAR,
+          Html5QrcodeSupportedFormats.ITF,
+        ];
+
+        const scanner = new Html5Qrcode(scannerContainerId, {
+          formatsToSupport: supportedFormats,
+          verbose: false,
+          experimentalFeatures: {
+            useBarCodeDetectorIfSupported: true,
+          },
+        });
         scannerRef.current = scanner;
 
+        // Deteksi kamera belakang perangkat atau kamera default
+        let cameraConfig: any = { facingMode: 'environment' };
+        try {
+          const cameras = await Html5Qrcode.getCameras();
+          if (cameras && cameras.length > 0) {
+            const backCam = cameras.find((c) =>
+              /back|rear|environment|belakang|main/i.test(c.label)
+            );
+            cameraConfig = backCam ? backCam.id : cameras[0].id;
+          }
+        } catch {
+          // Gunakan facingMode environment jika deteksi spesifik terhambat
+        }
+
         await scanner.start(
-          { facingMode: 'environment' },
+          cameraConfig,
           {
-            fps: 10,
-            qrbox: { width: 260, height: 180 },
+            fps: 15,
+            qrbox: (viewfinderWidth: number, viewfinderHeight: number) => {
+              const width = Math.min(viewfinderWidth - 20, 360);
+              const height = Math.min(Math.floor(viewfinderHeight * 0.75), 240);
+              return { width, height };
+            },
             aspectRatio: 1.333333,
           },
           async (decodedText) => {
-            if (mode === 'return') {
-              await handleCheckInBarcode(decodedText);
-            } else if (mode === 'create') {
-              // Look up santri and populate create modal
-              await handleSelectSantriByBarcode(decodedText);
+            const clean = decodedText.trim();
+            if (!clean) return;
+
+            const now = Date.now();
+            // Cegah duplikasi scan berturut-turut dalam 2.5 detik
+            if (
+              isProcessingScanRef.current ||
+              (clean === lastScannedCodeRef.current && now - lastScanTimeRef.current < 2500)
+            ) {
+              return;
+            }
+
+            lastScannedCodeRef.current = clean;
+            lastScanTimeRef.current = now;
+            isProcessingScanRef.current = true;
+            setScanningDetected(clean);
+
+            try {
+              if (mode === 'return') {
+                await handleCheckInBarcode(clean);
+              } else if (mode === 'create') {
+                await handleSelectSantriByBarcode(clean);
+              }
+            } finally {
+              setTimeout(() => {
+                isProcessingScanRef.current = false;
+                setScanningDetected(null);
+              }, 1200);
             }
           },
           () => {
-            // scan frame failure, ignore
+            // Frame tidak mendeteksi barcode, abaikan
           }
         );
       } catch (err) {
         console.error('Camera init error:', err);
         setCameraActive(false);
-        setFeedback({
-          type: 'error',
+        const errFb = {
+          type: 'error' as const,
           title: 'Kamera Tidak Tersedia',
-          message: 'Pastikan izin akses kamera diizinkan di browser Anda.',
-        });
+          message: 'Pastikan izin kamera diizinkan di browser Anda atau gunakan input manual / USB barcode scanner.',
+        };
+        setFeedback(errFb);
+        setModalFeedback(errFb);
       }
-    }, 200);
+    }, 250);
   };
 
   // Select Santri by barcode for new permission
   const handleSelectSantriByBarcode = async (barcodeVal: string) => {
-    const s = await findSantriByBarcode(barcodeVal.trim());
-    if (s) {
-      if (soundEnabled) playSuccessChime();
-      stopCamera();
-      setShowCheckInModal(false);
-      setNewPermData((prev) => ({
-        ...prev,
-        santri_id: s.id,
-        penanggung_jawab: s.nama_wali || '',
-        kontak_penanggung_jawab: s.kontak_wali || '',
-      }));
-      setShowCreateModal(true);
-    } else {
-      if (soundEnabled) playErrorChime();
-      setFeedback({
-        type: 'error',
-        title: 'Santri Tidak Ditemukan',
-        message: `Tidak ditemukan santri dengan Barcode / ID YYS "${barcodeVal}".`,
-      });
+    const clean = barcodeVal.trim();
+    if (!clean) return;
+
+    setScanLoading(true);
+    try {
+      const s = await findSantriByBarcode(clean);
+      if (s) {
+        if (soundEnabled) playSuccessChime();
+        await stopCamera();
+        setShowCheckInModal(false);
+        setNewPermData((prev) => ({
+          ...prev,
+          santri_id: s.id,
+          penanggung_jawab: s.nama_wali || '',
+          kontak_penanggung_jawab: s.kontak_wali || '',
+        }));
+        setShowCreateModal(true);
+        setFeedback({
+          type: 'success',
+          title: 'Santri Terpilih',
+          message: `Santri ${s.nama} (${s.id_yys}) berhasil dipilih dari barcode.`,
+        });
+      } else {
+        if (soundEnabled) playErrorChime();
+        const errFb = {
+          type: 'error' as const,
+          title: 'Santri Tidak Ditemukan',
+          message: `Tidak ditemukan santri dengan Barcode / ID YYS "${clean}".`,
+        };
+        setFeedback(errFb);
+        setModalFeedback(errFb);
+      }
+    } finally {
+      setScanLoading(false);
     }
   };
 
@@ -377,6 +493,46 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
     }
     checkConflict();
   }, [newPermData.santri_id, santriList]);
+
+  // Cari & Pasang Santri Berdasarkan ID YYS / Barcode / NIS
+  const handleApplySantriByIdYys = (rawText: string) => {
+    const clean = rawText.trim().toLowerCase();
+    if (!clean) {
+      setIdYysSearchError('Silakan masukkan ID YYS santri.');
+      return;
+    }
+
+    const exactMatch = santriList.find(
+      (s) =>
+        s.id_yys.toLowerCase() === clean ||
+        (s.nis && s.nis.toLowerCase() === clean) ||
+        (s.barcode_value && s.barcode_value.toLowerCase() === clean)
+    );
+
+    const partialMatch = !exactMatch
+      ? santriList.find(
+          (s) =>
+            s.id_yys.toLowerCase().includes(clean) ||
+            (s.nis && s.nis.toLowerCase().includes(clean)) ||
+            s.nama.toLowerCase().includes(clean)
+        )
+      : null;
+
+    const matched = exactMatch || partialMatch;
+
+    if (matched) {
+      setNewPermData((prev) => ({
+        ...prev,
+        santri_id: matched.id,
+        penanggung_jawab: prev.penanggung_jawab || matched.nama_wali || '',
+        kontak_penanggung_jawab: prev.kontak_penanggung_jawab || matched.kontak_wali || '',
+      }));
+      setInputSearchIdYys(matched.id_yys);
+      setIdYysSearchError(null);
+    } else {
+      setIdYysSearchError(`Santri dengan ID YYS / Barcode "${rawText}" tidak ditemukan.`);
+    }
+  };
 
   // Submit New Permission
   const handleSubmitCreatePermission = async (e: React.FormEvent) => {
@@ -538,7 +694,7 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
       p.santri?.id_yys || '',
       `"${p.santri?.nama || ''}"`,
       `"${p.santri?.kelas?.nama_kelas || ''}"`,
-      `"${p.santri?.kamar?.nama_kamar || ''}"`,
+      `"${getSantriKamarText(p.santri)}"`,
       p.jenis === 'IZIN_PULANG' ? 'Izin Pulang' : 'Izin Keluar',
       `"${p.alasan.replace(/"/g, '""')}"`,
       `"${p.tujuan.replace(/"/g, '""')}"`,
@@ -840,6 +996,71 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
             <span className="text-[10px] text-purple-600 font-medium">Status Diajukan</span>
           </div>
         </div>
+
+        {/* QUICK BARCODE & ID YYS KEPULANGAN SCANNER BAR */}
+        {canManage && (
+          <div className="mt-6 bg-gradient-to-r from-slate-950 via-slate-900 to-slate-950 rounded-2xl p-4 sm:p-5 text-white shadow-md border border-slate-800 flex flex-col md:flex-row items-stretch md:items-center justify-between gap-4">
+            <div className="flex items-center gap-3.5">
+              <div className="p-3 bg-emerald-500/20 text-emerald-400 rounded-xl border border-emerald-500/30 shrink-0">
+                <QrCode className="w-6 h-6" />
+              </div>
+              <div>
+                <div className="flex items-center gap-2">
+                  <h3 className="text-sm sm:text-base font-bold text-white tracking-wide">
+                    Scan Barcode / ID YYS Kepulangan Santri
+                  </h3>
+                  <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                    Scanner USB & Manual
+                  </span>
+                </div>
+                <p className="text-xs text-slate-300 mt-0.5">
+                  Scan barcode pada kartu santri atau ketik ID YYS lalu tekan Enter untuk langsung mencatat santri kembali.
+                </p>
+              </div>
+            </div>
+
+            <form
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (quickReturnBarcode.trim()) {
+                  handleCheckInBarcode(quickReturnBarcode.trim());
+                  setQuickReturnBarcode('');
+                }
+              }}
+              className="flex items-center gap-2 max-w-md w-full"
+            >
+              <div className="relative flex-1">
+                <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                <input
+                  type="text"
+                  value={quickReturnBarcode}
+                  onChange={(e) => setQuickReturnBarcode(e.target.value)}
+                  placeholder="Scan barcode kartu atau isi ID YYS..."
+                  className="w-full pl-10 pr-3 py-2.5 rounded-xl bg-slate-800/90 border border-slate-700 text-white text-xs placeholder:text-slate-400 focus:ring-2 focus:ring-emerald-400 focus:border-emerald-400 focus:outline-hidden font-mono"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={scanLoading || !quickReturnBarcode.trim()}
+                className="px-4 py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-600 disabled:opacity-50 text-slate-950 font-bold text-xs transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-xs"
+              >
+                <LogIn className="w-4 h-4" />
+                <span>{scanLoading ? '...' : 'Catat Kembali'}</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setShowCheckInModal(true);
+                  startCamera('return');
+                }}
+                className="p-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-emerald-400 border border-slate-700 transition-colors"
+                title="Buka Kamera Barcode Scanner"
+              >
+                <Camera className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        )}
       </div>
 
       {/* FILTER & TABS */}
@@ -974,8 +1195,8 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
             >
               <option value="SEMUA">Semua Kamar Asrama</option>
               {kamarList.map((kmr) => (
-                <option key={kmr.id} value={kmr.id}>
-                  {kmr.nama_kamar} - {kmr.gedung}
+                <option key={kmr.id} value={kmr.nama_kamar}>
+                  {kmr.nama_kamar}
                 </option>
               ))}
             </select>
@@ -1056,7 +1277,7 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                               {item.santri?.nama || 'Nama Santri'}
                             </span>
                             <span className="font-mono text-[11px] text-slate-500">
-                              {item.santri?.id_yys} • {item.santri?.kamar?.nama_kamar || 'Kamar -'}
+                              {item.santri?.id_yys} • {getSantriKamarText(item.santri) ? `Kamar ${getSantriKamarText(item.santri)}` : 'Kamar -'}
                             </span>
                           </div>
                         </div>
@@ -1178,19 +1399,38 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
 
                           {/* Tombol Catat Kembali jika SUDAH_KELUAR */}
                           {item.status === 'SUDAH_KELUAR' && canManage && (
-                            <button
-                              type="button"
-                              onClick={async () => {
-                                const isOver = now > batasDate;
-                                const newSt = isOver ? 'TERLAMBAT' : 'SUDAH_KEMBALI';
-                                await handleUpdateStatus(item.id, newSt);
-                              }}
-                              className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 transition-colors"
-                              title="Catat Santri Kembali"
-                            >
-                              <LogIn className="w-3 h-3" />
-                              <span>Kembali</span>
-                            </button>
+                            <>
+                              <button
+                                type="button"
+                                onClick={async () => {
+                                  const isOver = now > batasDate;
+                                  const newSt = isOver ? 'TERLAMBAT' : 'SUDAH_KEMBALI';
+                                  await handleUpdateStatus(item.id, newSt);
+                                }}
+                                className="px-2 py-1 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-[11px] flex items-center gap-1 transition-colors"
+                                title="Catat Santri Kembali"
+                              >
+                                <LogIn className="w-3 h-3" />
+                                <span>Kembali</span>
+                              </button>
+
+                              <button
+                                type="button"
+                                onClick={() => {
+                                  const code = item.santri?.barcode_value || item.santri?.id_yys || '';
+                                  if (code) {
+                                    handleCheckInBarcode(code);
+                                  } else {
+                                    setShowCheckInModal(true);
+                                    startCamera('return');
+                                  }
+                                }}
+                                className="p-1.5 rounded-lg bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-300 transition-colors"
+                                title={`Scan Barcode Kepulangan: ${item.santri?.nama}`}
+                              >
+                                <QrCode className="w-3.5 h-3.5" />
+                              </button>
+                            </>
                           )}
 
                           {/* Tombol Detail */}
@@ -1229,10 +1469,14 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                 </div>
                 <div>
                   <h3 className="font-bold text-slate-900 text-base">
-                    Scan Barcode Kepulangan Santri
+                    {scannerMode === 'create'
+                      ? 'Pindai Barcode / ID YYS Santri'
+                      : 'Scan Barcode Kepulangan Santri'}
                   </h3>
                   <p className="text-xs text-slate-500">
-                    Sistem mendeteksi izin aktif & mengevaluasi batas waktu kembali.
+                    {scannerMode === 'create'
+                      ? 'Arahkan kamera ke kartu santri untuk memilih otomatis ke formulir perizinan.'
+                      : 'Sistem mendeteksi izin aktif & mengevaluasi batas waktu kembali.'}
                   </p>
                 </div>
               </div>
@@ -1242,6 +1486,7 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                 onClick={() => {
                   stopCamera();
                   setShowCheckInModal(false);
+                  setModalFeedback(null);
                 }}
                 className="p-1.5 text-slate-400 hover:text-slate-600 rounded-lg"
               >
@@ -1249,20 +1494,68 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
               </button>
             </div>
 
+            {/* In-Modal Feedback Banner */}
+            {modalFeedback && (
+              <div
+                className={`p-3 rounded-2xl border text-xs flex items-start justify-between gap-2.5 ${
+                  modalFeedback.type === 'success'
+                    ? 'bg-emerald-50 border-emerald-200 text-emerald-900'
+                    : modalFeedback.type === 'warning'
+                    ? 'bg-amber-50 border-amber-200 text-amber-900'
+                    : 'bg-rose-50 border-rose-200 text-rose-900'
+                }`}
+              >
+                <div className="flex items-start gap-2">
+                  {modalFeedback.type === 'success' ? (
+                    <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0 mt-0.5" />
+                  ) : modalFeedback.type === 'warning' ? (
+                    <AlertTriangle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                  ) : (
+                    <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                  )}
+                  <div>
+                    <p className="font-bold">{modalFeedback.title}</p>
+                    <p className="mt-0.5 leading-relaxed">{modalFeedback.message}</p>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setModalFeedback(null)}
+                  className="p-1 text-slate-400 hover:text-slate-600 rounded-md"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              </div>
+            )}
+
             {/* Camera Viewport */}
             <div className="space-y-3">
               <div className="relative rounded-2xl overflow-hidden bg-slate-950 aspect-4/3 flex items-center justify-center">
                 <div id={scannerContainerId} className="w-full h-full" />
-                {!cameraActive && (
+                {cameraActive ? (
+                  <>
+                    <div className="absolute top-2.5 left-2.5 px-2.5 py-1 bg-slate-900/80 text-emerald-400 text-[10px] font-semibold rounded-lg backdrop-blur-xs flex items-center gap-1.5 shadow-sm border border-emerald-500/20">
+                      <span className="w-2 h-2 rounded-full bg-emerald-400 animate-ping" />
+                      <span>Kamera Aktif • Barcode 1D & QR</span>
+                    </div>
+                    {scanningDetected && (
+                      <div className="absolute inset-x-4 bottom-4 p-2 bg-emerald-600 text-white font-bold text-xs rounded-xl text-center shadow-lg animate-pulse flex items-center justify-center gap-1.5">
+                        <CheckCircle2 className="w-4 h-4" />
+                        <span>Barcode Terbaca: {scanningDetected} (Memproses...)</span>
+                      </div>
+                    )}
+                  </>
+                ) : (
                   <div className="absolute inset-0 flex flex-col items-center justify-center text-slate-400 p-4 text-center">
                     <CameraOff className="w-10 h-10 mb-2 text-slate-500" />
                     <p className="text-xs">Kamera tidak aktif.</p>
                     <button
                       type="button"
-                      onClick={() => startCamera('return')}
-                      className="mt-3 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs"
+                      onClick={() => startCamera(scannerMode)}
+                      className="mt-3 px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white font-bold text-xs shadow-sm flex items-center gap-1.5"
                     >
-                      Nyalakan Kamera
+                      <Camera className="w-4 h-4" />
+                      <span>Nyalakan Kamera</span>
                     </button>
                   </div>
                 )}
@@ -1279,10 +1572,56 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                     {soundEnabled ? <Volume2 className="w-4 h-4 text-emerald-600" /> : <VolumeX className="w-4 h-4 text-slate-400" />}
                     <span>Suara {soundEnabled ? 'Aktif' : 'Mati'}</span>
                   </button>
+
+                  <button
+                    type="button"
+                    onClick={() => {
+                      if (cameraActive) {
+                        stopCamera();
+                      } else {
+                        startCamera(scannerMode);
+                      }
+                    }}
+                    className="p-2 rounded-xl border border-slate-200 text-slate-600 hover:bg-slate-50 flex items-center gap-1.5"
+                  >
+                    {cameraActive ? <CameraOff className="w-4 h-4 text-rose-500" /> : <Camera className="w-4 h-4 text-emerald-600" />}
+                    <span>{cameraActive ? 'Matikan Kamera' : 'Buka Kamera'}</span>
+                  </button>
                 </div>
 
                 <div className="text-[11px] text-slate-500">
-                  Mendukung Scanner USB / Laser & Kamera HP
+                  Barcode 1D (Code128), QR, & Scanner USB
+                </div>
+              </div>
+
+              {/* Quick Barcode Testing Buttons */}
+              <div className="pt-2 border-t border-slate-100 space-y-1.5">
+                <p className="text-[11px] font-semibold text-slate-600">
+                  Uji Coba Cepat (Klik ID Santri untuk simulasi scan):
+                </p>
+                <div className="flex flex-wrap gap-1.5">
+                  {[
+                    { code: 'YYS202600126', label: 'Zayyan (Izin Aktif)' },
+                    { code: 'YYS202600123', label: 'Farhan' },
+                    { code: 'YYS202600124', label: 'Dani' },
+                    { code: 'YYS202600125', label: 'Nabil' },
+                  ].map((demo) => (
+                    <button
+                      key={demo.code}
+                      type="button"
+                      onClick={() => {
+                        setBarcodeInput(demo.code);
+                        if (scannerMode === 'return') {
+                          handleCheckInBarcode(demo.code);
+                        } else {
+                          handleSelectSantriByBarcode(demo.code);
+                        }
+                      }}
+                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-emerald-50 hover:text-emerald-700 hover:border-emerald-200 border border-slate-200 text-slate-700 text-[11px] font-mono transition-colors"
+                    >
+                      {demo.label} ({demo.code})
+                    </button>
+                  ))}
                 </div>
               </div>
 
@@ -1290,7 +1629,12 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
               <form
                 onSubmit={(e) => {
                   e.preventDefault();
-                  handleCheckInBarcode(barcodeInput);
+                  if (!barcodeInput.trim()) return;
+                  if (scannerMode === 'return') {
+                    handleCheckInBarcode(barcodeInput);
+                  } else {
+                    handleSelectSantriByBarcode(barcodeInput);
+                  }
                 }}
                 className="pt-2 border-t border-slate-100 flex gap-2"
               >
@@ -1299,7 +1643,11 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                   type="text"
                   value={barcodeInput}
                   onChange={(e) => setBarcodeInput(e.target.value)}
-                  placeholder="Ketik Barcode / ID YYS santri (e.g. YYS202600126)..."
+                  placeholder={
+                    scannerMode === 'create'
+                      ? 'Ketik Barcode / ID YYS santri (e.g. YYS202600123)...'
+                      : 'Ketik Barcode / ID YYS santri (e.g. YYS202600126)...'
+                  }
                   className="flex-1 px-3 py-2 text-xs font-mono rounded-xl border border-slate-300 focus:ring-2 focus:ring-emerald-500 focus:outline-hidden"
                 />
                 <button
@@ -1307,7 +1655,11 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                   disabled={scanLoading || !barcodeInput.trim()}
                   className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 disabled:opacity-50 text-white font-bold text-xs rounded-xl shadow-xs"
                 >
-                  {scanLoading ? 'Memproses...' : 'Catat'}
+                  {scanLoading
+                    ? 'Memproses...'
+                    : scannerMode === 'create'
+                    ? 'Pilih Santri'
+                    : 'Catat'}
                 </button>
               </form>
             </div>
@@ -1346,11 +1698,13 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
             </div>
 
             <form onSubmit={handleSubmitCreatePermission} className="space-y-4">
-              {/* Santri Selector / Scan Shortcut */}
-              <div className="space-y-1.5">
+              {/* Input ID YYS Santri & Selector */}
+              <div className="space-y-2 p-4 rounded-2xl bg-slate-50 border border-slate-200">
                 <div className="flex items-center justify-between">
-                  <label htmlFor="select-santri-izin" className="text-xs font-bold text-slate-700">
-                    Pilih Santri <span className="text-rose-500">*</span>
+                  <label htmlFor="input-id-yys-izin" className="text-xs font-bold text-slate-800 flex items-center gap-1.5">
+                    <QrCode className="w-4 h-4 text-emerald-600" />
+                    <span>Input ID YYS Santri / Scan Barcode</span>
+                    <span className="text-rose-500">*</span>
                   </label>
                   <button
                     type="button"
@@ -1359,27 +1713,130 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                       setShowCheckInModal(true);
                       startCamera('create');
                     }}
-                    className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                    className="text-xs font-bold text-emerald-700 hover:text-emerald-800 flex items-center gap-1 bg-emerald-100/70 hover:bg-emerald-200/70 px-2 py-1 rounded-lg transition-colors"
                   >
-                    <QrCode className="w-3.5 h-3.5" />
-                    <span>Pindai Barcode ID YYS</span>
+                    <Camera className="w-3.5 h-3.5" />
+                    <span>Scan Kamera</span>
                   </button>
                 </div>
 
-                <select
-                  id="select-santri-izin"
-                  value={newPermData.santri_id}
-                  onChange={(e) => setNewPermData({ ...newPermData, santri_id: e.target.value })}
-                  required
-                  className="w-full px-3 py-2.5 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-hidden bg-white font-medium"
-                >
-                  <option value="">-- Pilih Santri --</option>
-                  {santriList.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.nama} ({s.id_yys}) - {s.kelas?.nama_kelas || 'Kelas -'} / {s.kamar?.nama_kamar || 'Kamar -'} [{s.status_santri}]
-                    </option>
-                  ))}
-                </select>
+                <div className="flex gap-2">
+                  <div className="relative flex-1">
+                    <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
+                    <input
+                      id="input-id-yys-izin"
+                      type="text"
+                      value={inputSearchIdYys}
+                      onChange={(e) => {
+                        setInputSearchIdYys(e.target.value);
+                        setIdYysSearchError(null);
+                      }}
+                      onKeyDown={(e) => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          handleApplySantriByIdYys(inputSearchIdYys);
+                        }
+                      }}
+                      placeholder="Ketik atau scan ID YYS (contoh: YYS202600126)..."
+                      className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs sm:text-sm focus:ring-2 focus:ring-emerald-500 focus:outline-hidden bg-white font-mono"
+                    />
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => handleApplySantriByIdYys(inputSearchIdYys)}
+                    className="px-3.5 py-2 rounded-xl bg-slate-900 hover:bg-slate-800 text-white font-bold text-xs transition-colors shrink-0 shadow-xs"
+                  >
+                    Terapkan
+                  </button>
+                </div>
+
+                {idYysSearchError && (
+                  <p className="text-xs text-rose-600 font-medium flex items-center gap-1">
+                    <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+                    <span>{idYysSearchError}</span>
+                  </p>
+                )}
+
+                {/* Tampilan Informasi Santri Terpilih */}
+                {(() => {
+                  const selectedSantri = santriList.find((s) => s.id === newPermData.santri_id);
+                  if (!selectedSantri) return null;
+                  return (
+                    <div className="p-3 rounded-xl bg-emerald-50 border border-emerald-200 text-emerald-950 flex flex-col sm:flex-row sm:items-center justify-between gap-3 animate-in fade-in duration-200">
+                      <div className="flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-xl bg-emerald-600 text-white font-bold flex items-center justify-center text-sm shadow-xs shrink-0">
+                          {selectedSantri.nama.charAt(0).toUpperCase()}
+                        </div>
+                        <div>
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <span className="font-bold text-xs sm:text-sm text-slate-900">
+                              {selectedSantri.nama}
+                            </span>
+                            <span className="px-2 py-0.5 rounded-full text-[10px] font-mono font-bold bg-emerald-200/80 text-emerald-900 border border-emerald-300">
+                              ID: {selectedSantri.id_yys}
+                            </span>
+                            {selectedSantri.nis && (
+                              <span className="px-1.5 py-0.2 rounded-md text-[10px] font-mono bg-white text-slate-600 border border-slate-200">
+                                NIS: {selectedSantri.nis}
+                              </span>
+                            )}
+                          </div>
+                          <div className="text-[11px] text-slate-600 mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5">
+                            <span>Kelas: <strong>{selectedSantri.kelas?.nama_kelas || '-'}</strong></span>
+                            <span>Kamar: <strong>{getSantriKamarText(selectedSantri)}</strong></span>
+                            {selectedSantri.nama_wali && (
+                              <span>Wali: <strong>{selectedSantri.nama_wali}</strong> {selectedSantri.kontak_wali ? `(${selectedSantri.kontak_wali})` : ''}</span>
+                            )}
+                          </div>
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1.5 shrink-0 self-end sm:self-center">
+                        <span className="px-2 py-1 rounded-lg bg-emerald-600 text-white text-[10px] font-bold flex items-center gap-1 shadow-2xs">
+                          <Check className="w-3 h-3" />
+                          <span>Santri Terpilih</span>
+                        </span>
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Alternatif Dropdown Pilih Santri */}
+                <div className="pt-2 border-t border-slate-200/70">
+                  <label htmlFor="select-santri-izin" className="block text-[11px] font-medium text-slate-500 mb-1">
+                    Atau pilih santri dari daftar:
+                  </label>
+                  <select
+                    id="select-santri-izin"
+                    value={newPermData.santri_id}
+                    onChange={(e) => {
+                      const selectedId = e.target.value;
+                      const s = santriList.find((item) => item.id === selectedId);
+                      setNewPermData({
+                        ...newPermData,
+                        santri_id: selectedId,
+                        penanggung_jawab: newPermData.penanggung_jawab || s?.nama_wali || '',
+                        kontak_penanggung_jawab: newPermData.kontak_penanggung_jawab || s?.kontak_wali || '',
+                      });
+                      if (s) {
+                        setInputSearchIdYys(s.id_yys);
+                        setIdYysSearchError(null);
+                      }
+                    }}
+                    required
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:outline-hidden bg-white font-medium"
+                  >
+                    <option value="">-- Pilih Nama Santri --</option>
+                    {santriList.map((s) => {
+                      const kamarDisplay = getSantriKamarText(s);
+                      const kamarLabel = kamarDisplay ? (kamarDisplay.startsWith('Kamar') ? kamarDisplay : `Kamar ${kamarDisplay}`) : 'Kamar -';
+                      return (
+                        <option key={s.id} value={s.id}>
+                          {s.nama} ({s.id_yys}) - {s.kelas?.nama_kelas || 'Kelas -'} / {kamarLabel} [{s.status_santri}]
+                        </option>
+                      );
+                    })}
+                  </select>
+                </div>
               </div>
 
               {/* Conflict Alert Warning */}
@@ -1694,8 +2151,8 @@ export const PerizinanView: React.FC<PerizinanViewProps> = ({ onNavigate }) => {
                   <span className="font-medium text-slate-800">{selectedPermission.santri?.kelas?.nama_kelas || '-'}</span>
                 </div>
                 <div>
-                  <span className="text-slate-500 block">Kamar Asrama:</span>
-                  <span className="font-medium text-slate-800">{selectedPermission.santri?.kamar?.nama_kamar || '-'}</span>
+                  <span className="text-slate-500 block">Kamar:</span>
+                  <span className="font-medium text-slate-800">{getSantriKamarText(selectedPermission.santri)}</span>
                 </div>
               </div>
 

@@ -25,7 +25,15 @@ import {
   Lock,
   FileSpreadsheet,
 } from 'lucide-react';
-import { Santri, Kelas, Kamar, StatusSantri, JenisKelamin } from '../types';
+import {
+  Santri,
+  Kelas,
+  Kamar,
+  StatusSantri,
+  JenisKelamin,
+  getSantriKamarText,
+  getSantriMadinText,
+} from '../types';
 import {
   getSantriList,
   createSantri,
@@ -33,6 +41,7 @@ import {
   deleteSantri,
   getKamarList,
   getKelasList,
+  getKelasMadinList,
 } from '../services/santriService';
 import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../lib/roles';
@@ -49,8 +58,10 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
   const canDelete = hasPermission(currentRole, 'delete_santri');
 
   const [santriList, setSantriList] = useState<Santri[]>([]);
+  const [allMasterSantri, setAllMasterSantri] = useState<Santri[]>([]);
   const [kamarList, setKamarList] = useState<Kamar[]>([]);
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
+  const [madinList, setMadinList] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -58,6 +69,7 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedKelas, setSelectedKelas] = useState('');
   const [selectedKamar, setSelectedKamar] = useState('');
+  const [selectedMadin, setSelectedMadin] = useState('');
   const [selectedStatus, setSelectedStatus] = useState('');
   const [selectedGender, setSelectedGender] = useState('');
 
@@ -75,7 +87,9 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
     nis: '',
     jenis_kelamin: 'L' as JenisKelamin,
     kelas_id: '',
+    kamar: '',
     kamar_id: '',
+    kelas_madin: '',
     rayon: '',
     status_santri: 'Aktif' as StatusSantri,
     barcode_value: '',
@@ -91,20 +105,27 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
     setLoading(true);
     setErrorMsg(null);
     try {
-      const [santriData, kamars, kelass] = await Promise.all([
+      const [santriData, kamars, kelass, madins, allMaster] = await Promise.all([
         getSantriList({
           query: searchQuery,
           kelasId: selectedKelas || undefined,
+          kamar: selectedKamar || undefined,
           kamarId: selectedKamar || undefined,
+          kelasMadin: selectedMadin || undefined,
+          rayon: selectedMadin || undefined,
           status: selectedStatus || undefined,
           gender: selectedGender || undefined,
         }),
         getKamarList(),
         getKelasList(),
+        getKelasMadinList(),
+        getSantriList(), // Ambil master lengkap untuk opsi filter kamar & madin
       ]);
       setSantriList(santriData);
       setKamarList(kamars);
       setKelasList(kelass);
+      setMadinList(madins);
+      setAllMasterSantri(allMaster);
     } catch (err: unknown) {
       setErrorMsg(err instanceof Error ? err.message : 'Gagal memuat data santri');
     } finally {
@@ -114,12 +135,49 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
 
   useEffect(() => {
     fetchData();
-  }, [searchQuery, selectedKelas, selectedKamar, selectedStatus, selectedGender]);
+  }, [searchQuery, selectedKelas, selectedKamar, selectedMadin, selectedStatus, selectedGender]);
+
+  // Kumpulan kamar unik dari santri master (termasuk hasil import Excel) & master kamar
+  const availableKamars = useMemo(() => {
+    const map = new Map<string, string>();
+    // 1. Dari master kamar bawaan
+    kamarList.forEach((k) => {
+      if (k.nama_kamar && k.nama_kamar.trim()) {
+        map.set(k.nama_kamar.trim().toLowerCase(), k.nama_kamar.trim());
+      }
+    });
+    // 2. Dari data santri master (termasuk data yang diimport pengguna)
+    allMasterSantri.forEach((s) => {
+      const kText = getSantriKamarText(s);
+      if (kText && kText !== '-' && kText.trim()) {
+        map.set(kText.trim().toLowerCase(), kText.trim());
+      }
+    });
+    return Array.from(map.values()).sort((a, b) =>
+      a.localeCompare(b, undefined, { numeric: true, sensitivity: 'base' })
+    );
+  }, [kamarList, allMasterSantri]);
+
+  // Kumpulan kelas madin unik dari data santri master & master madin
+  const availableMadins = useMemo(() => {
+    const map = new Map<string, string>();
+    madinList.forEach((m) => {
+      if (m && m.trim()) map.set(m.trim().toLowerCase(), m.trim());
+    });
+    allMasterSantri.forEach((s) => {
+      const mText = getSantriMadinText(s);
+      if (mText && mText !== '-' && mText.trim()) {
+        map.set(mText.trim().toLowerCase(), mText.trim());
+      }
+    });
+    return Array.from(map.values()).sort();
+  }, [madinList, allMasterSantri]);
 
   const resetFilters = () => {
     setSearchQuery('');
     setSelectedKelas('');
     setSelectedKamar('');
+    setSelectedMadin('');
     setSelectedStatus('');
     setSelectedGender('');
   };
@@ -135,8 +193,10 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
       nis: `NIS2026${randomSuffix.toString().substring(0, 3)}`,
       jenis_kelamin: 'L',
       kelas_id: kelasList[0]?.id || '',
-      kamar_id: kamarList[0]?.id || '',
-      rayon: '',
+      kamar: kamarList[0]?.nama_kamar || '',
+      kamar_id: '',
+      kelas_madin: madinList[0] || '',
+      rayon: madinList[0] || '',
       status_santri: 'Aktif',
       barcode_value: suggestedIdYys,
       nama_wali: '',
@@ -149,14 +209,18 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
 
   const openEditModal = (santri: Santri) => {
     setEditingSantri(santri);
+    const kamarText = getSantriKamarText(santri);
+    const madinText = getSantriMadinText(santri);
     setFormData({
       id_yys: santri.id_yys,
       nama: santri.nama,
       nis: santri.nis || '',
       jenis_kelamin: santri.jenis_kelamin,
       kelas_id: santri.kelas_id || '',
+      kamar: kamarText === '-' ? '' : kamarText,
       kamar_id: santri.kamar_id || '',
-      rayon: santri.rayon || '',
+      kelas_madin: madinText === '-' ? '' : madinText,
+      rayon: madinText === '-' ? '' : madinText,
       status_santri: santri.status_santri,
       barcode_value: santri.barcode_value,
       nama_wali: santri.nama_wali || '',
@@ -181,14 +245,19 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
 
     setFormSubmitting(true);
     try {
+      const cleanKamar = formData.kamar.trim() || null;
+      const cleanMadin = (formData.kelas_madin || formData.rayon)?.trim() || null;
+
       if (editingSantri) {
         const { error } = await updateSantri(editingSantri.id, {
           nama: formData.nama.trim(),
           nis: formData.nis.trim() || null,
           jenis_kelamin: formData.jenis_kelamin,
           kelas_id: formData.kelas_id || null,
-          kamar_id: formData.kamar_id || null,
-          rayon: formData.rayon.trim() || null,
+          kamar: cleanKamar,
+          kamar_id: null,
+          kelas_madin: cleanMadin,
+          rayon: cleanMadin,
           status_santri: formData.status_santri,
           barcode_value: formData.barcode_value.trim() || formData.id_yys.trim(),
           nama_wali: formData.nama_wali.trim() || null,
@@ -208,8 +277,10 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
           nis: formData.nis.trim() || null,
           jenis_kelamin: formData.jenis_kelamin,
           kelas_id: formData.kelas_id || null,
-          kamar_id: formData.kamar_id || null,
-          rayon: formData.rayon.trim() || null,
+          kamar: cleanKamar,
+          kamar_id: null,
+          kelas_madin: cleanMadin,
+          rayon: cleanMadin,
           status_santri: formData.status_santri,
           barcode_value: formData.barcode_value.trim() || formData.id_yys.trim().toUpperCase(),
           nama_wali: formData.nama_wali.trim() || null,
@@ -303,7 +374,7 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
 
       {/* Filter Bar */}
       <div className="bg-white p-4 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-2.5">
           {/* Search by Name / ID YYS / Barcode */}
           <div className="lg:col-span-2 relative">
             <Search className="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2" />
@@ -312,7 +383,7 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              placeholder="Cari ID YYS, Barcode, Nama, atau NIS..."
+              placeholder="Cari ID YYS, Barcode, Nama..."
               className="w-full pl-9 pr-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500 focus:border-emerald-500"
             />
           </div>
@@ -334,18 +405,35 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
             </select>
           </div>
 
-          {/* Filter Kamar */}
+          {/* Filter Kamar (sesuai data santri master & hasil import) */}
           <div>
             <select
               id="filter-kamar"
               value={selectedKamar}
               onChange={(e) => setSelectedKamar(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-emerald-500"
+              className="w-full min-h-[44px] px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-emerald-500 font-medium"
             >
-              <option value="">Semua Kamar Asrama</option>
-              {kamarList.map((k) => (
-                <option key={k.id} value={k.id}>
-                  {k.nama_kamar}
+              <option value="">Semua Kamar ({availableKamars.length})</option>
+              {availableKamars.map((kName) => (
+                <option key={kName} value={kName}>
+                  {kName}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Filter Kelas Madin (sesuai data santri master & hasil import) */}
+          <div>
+            <select
+              id="filter-madin"
+              value={selectedMadin}
+              onChange={(e) => setSelectedMadin(e.target.value)}
+              className="w-full min-h-[44px] px-3 py-2.5 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-emerald-500 font-medium"
+            >
+              <option value="">Semua Kelas Madin ({availableMadins.length})</option>
+              {availableMadins.map((mName) => (
+                <option key={mName} value={mName}>
+                  {mName}
                 </option>
               ))}
             </select>
@@ -367,7 +455,7 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
               <option value="Lulus">Lulus</option>
             </select>
 
-            {(searchQuery || selectedKelas || selectedKamar || selectedStatus || selectedGender) && (
+            {(searchQuery || selectedKelas || selectedKamar || selectedMadin || selectedStatus || selectedGender) && (
               <button
                 type="button"
                 onClick={resetFilters}
@@ -432,8 +520,8 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
                     <th className="py-3 px-4">Santri & ID YYS</th>
                     <th className="py-3 px-4">NIS / L/P</th>
                     <th className="py-3 px-4">Kelas</th>
-                    <th className="py-3 px-4">Kamar Asrama</th>
-                    <th className="py-3 px-4">Rayon</th>
+                    <th className="py-3 px-4">Kamar</th>
+                    <th className="py-3 px-4">Kelas Madin</th>
                     <th className="py-3 px-4">Status</th>
                     <th className="py-3 px-4 text-right">Aksi</th>
                   </tr>
@@ -465,10 +553,26 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
                       </td>
 
                       <td className="py-3 px-4 text-slate-700">
-                        {santri.kamar?.nama_kamar || '-'}
+                        {getSantriKamarText(santri) !== '-' ? (
+                          <span className="inline-flex items-center px-2 py-0.5 rounded-md text-xs font-semibold bg-indigo-50 text-indigo-700 border border-indigo-200">
+                            {getSantriKamarText(santri)}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(santri)}
+                            className="inline-flex items-center gap-1 text-[11px] font-medium text-amber-700 bg-amber-50 hover:bg-amber-100 px-2 py-0.5 rounded border border-dashed border-amber-300 transition-colors"
+                            title="Klik untuk mengisi kamar"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Atur Kamar</span>
+                          </button>
+                        )}
                       </td>
 
-                      <td className="py-3 px-4 text-slate-600">{santri.rayon || '-'}</td>
+                      <td className="py-3 px-4 text-slate-700">
+                        {getSantriMadinText(santri)}
+                      </td>
 
                       <td className="py-3 px-4">
                         <span
@@ -526,89 +630,133 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
               </table>
             </div>
 
-            {/* Mobile Cards View (Optimized for Android / iPhone) */}
-            <div className="md:hidden divide-y divide-slate-100">
-              {santriList.map((santri) => (
-                <div key={santri.id} className="p-4 space-y-2.5">
-                  <div className="flex items-start justify-between gap-2">
-                    <div>
-                      <div className="font-bold text-slate-900 text-sm">{santri.nama}</div>
-                      <div className="flex items-center gap-1.5 mt-1 flex-wrap">
-                        <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
-                          {santri.id_yys}
-                        </span>
-                        <span
-                          className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                            santri.status_santri === 'Aktif'
-                              ? 'bg-emerald-100 text-emerald-800'
-                              : santri.status_santri === 'Izin'
-                              ? 'bg-amber-100 text-amber-800'
-                              : santri.status_santri === 'Sakit'
-                              ? 'bg-rose-100 text-rose-800'
-                              : 'bg-slate-100 text-slate-700'
-                          }`}
+            {/* Mobile Cards View (Optimized for Android / iPhone Touch Targets & Clarity) */}
+            <div className="md:hidden p-3 space-y-3 bg-slate-50/50">
+              {santriList.map((santri) => {
+                const kamarVal = getSantriKamarText(santri);
+                const madinVal = getSantriMadinText(santri);
+                return (
+                  <div
+                    key={santri.id}
+                    className="p-4 bg-white rounded-2xl border border-slate-200 shadow-xs space-y-3"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="space-y-1">
+                        <div className="font-bold text-slate-900 text-base leading-snug">
+                          {santri.nama}
+                        </div>
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span className="font-mono text-xs font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                            {santri.id_yys}
+                          </span>
+                          <span
+                            className={`inline-flex items-center px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                              santri.status_santri === 'Aktif'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : santri.status_santri === 'Izin'
+                                ? 'bg-amber-100 text-amber-800'
+                                : santri.status_santri === 'Sakit'
+                                ? 'bg-rose-100 text-rose-800'
+                                : 'bg-slate-100 text-slate-700'
+                            }`}
+                          >
+                            {santri.status_santri}
+                          </span>
+                          {santri.nis && (
+                            <span className="text-[11px] text-slate-500 font-mono">
+                              NIS: {santri.nis}
+                            </span>
+                          )}
+                        </div>
+                      </div>
+
+                      {/* Touch-Friendly Action Buttons (>= 44px touch target) */}
+                      <div className="flex items-center gap-1.5 shrink-0">
+                        <button
+                          type="button"
+                          onClick={() => setViewingSantri(santri)}
+                          className="min-w-[44px] min-h-[44px] flex items-center justify-center text-slate-600 bg-slate-100 active:bg-slate-200 rounded-xl transition-colors"
+                          title="Lihat Detail"
+                          aria-label="Lihat Detail"
                         >
-                          {santri.status_santri}
-                        </span>
+                          <Eye className="w-5 h-5" />
+                        </button>
+                        {canEdit && (
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(santri)}
+                            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-blue-700 bg-blue-50 active:bg-blue-100 rounded-xl transition-colors"
+                            title="Edit"
+                            aria-label="Edit"
+                          >
+                            <Edit2 className="w-5 h-5" />
+                          </button>
+                        )}
+                        {canDelete && (
+                          <button
+                            type="button"
+                            onClick={() => setDeletingSantri(santri)}
+                            className="min-w-[44px] min-h-[44px] flex items-center justify-center text-rose-700 bg-rose-50 active:bg-rose-100 rounded-xl transition-colors"
+                            title="Hapus"
+                            aria-label="Hapus"
+                          >
+                            <Trash2 className="w-5 h-5" />
+                          </button>
+                        )}
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-1">
-                      <button
-                        type="button"
-                        onClick={() => setViewingSantri(santri)}
-                        className="p-2 text-slate-500 hover:bg-slate-100 rounded-lg"
-                        title="Lihat Detail"
-                      >
-                        <Eye className="w-4 h-4" />
-                      </button>
-                      {canEdit && (
-                        <button
-                          type="button"
-                          onClick={() => openEditModal(santri)}
-                          className="p-2 text-blue-600 hover:bg-blue-50 rounded-lg"
-                          title="Edit"
-                        >
-                          <Edit2 className="w-4 h-4" />
-                        </button>
-                      )}
-                      {canDelete && (
-                        <button
-                          type="button"
-                          onClick={() => setDeletingSantri(santri)}
-                          className="p-2 text-rose-600 hover:bg-rose-50 rounded-lg"
-                          title="Hapus"
-                        >
-                          <Trash2 className="w-4 h-4" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
+                    <div className="grid grid-cols-2 gap-2 text-xs bg-slate-50/90 p-3 rounded-xl border border-slate-200/80">
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+                          Kelas
+                        </span>
+                        <span className="font-semibold text-slate-800 text-xs">
+                          {santri.kelas?.nama_kelas || '-'}
+                        </span>
+                      </div>
 
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600 bg-slate-50 p-2.5 rounded-xl border border-slate-100">
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">Kelas:</span>
-                      <span className="font-medium text-slate-800">
-                        {santri.kelas?.nama_kelas || '-'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">Kamar Asrama:</span>
-                      <span className="font-medium text-slate-800">
-                        {santri.kamar?.nama_kamar || '-'}
-                      </span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">NIS:</span>
-                      <span>{santri.nis || '-'}</span>
-                    </div>
-                    <div>
-                      <span className="text-[10px] text-slate-400 block">Rayon:</span>
-                      <span>{santri.rayon || '-'}</span>
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+                          Kamar
+                        </span>
+                        {kamarVal !== '-' ? (
+                          <span className="inline-flex items-center font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200 text-xs">
+                            {kamarVal}
+                          </span>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => openEditModal(santri)}
+                            className="inline-flex items-center gap-1 text-[11px] font-semibold text-amber-700 bg-amber-50 px-2 py-0.5 rounded border border-dashed border-amber-300"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Atur Kamar</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+                          Jenis Kelamin
+                        </span>
+                        <span className="font-medium text-slate-700 text-xs">
+                          {santri.jenis_kelamin === 'L' ? 'Laki-laki' : 'Perempuan'}
+                        </span>
+                      </div>
+
+                      <div>
+                        <span className="text-[10px] uppercase tracking-wider text-slate-400 font-semibold block mb-0.5">
+                          Kelas Madin
+                        </span>
+                        <span className="font-semibold text-slate-800 text-xs">
+                          {madinVal}
+                        </span>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </>
         )}
@@ -689,14 +837,16 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
                 </span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Kamar Asrama</span>
+                <span className="text-slate-500">Kamar</span>
                 <span className="font-medium text-slate-800">
-                  {viewingSantri.kamar?.nama_kamar || '-'}
+                  {getSantriKamarText(viewingSantri)}
                 </span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100">
-                <span className="text-slate-500">Rayon / Asal Daerah</span>
-                <span className="text-slate-800">{viewingSantri.rayon || '-'}</span>
+                <span className="text-slate-500">Kelas Madin</span>
+                <span className="font-medium text-slate-800">
+                  {getSantriMadinText(viewingSantri)}
+                </span>
               </div>
               <div className="flex justify-between py-1.5 border-b border-slate-100">
                 <span className="text-slate-500">Nama Wali</span>
@@ -907,38 +1057,51 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
 
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Kamar Asrama
+                    Kamar
                   </label>
-                  <select
+                  <input
                     id="form-kamar"
-                    value={formData.kamar_id}
-                    onChange={(e) => setFormData({ ...formData, kamar_id: e.target.value })}
-                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs bg-white focus:ring-2 focus:ring-emerald-500"
-                  >
-                    <option value="">Pilih Kamar...</option>
-                    {kamarList.map((k) => (
-                      <option key={k.id} value={k.id}>
-                        {k.nama_kamar} - {k.gedung}
-                      </option>
+                    type="text"
+                    list="kamar-suggestions"
+                    value={formData.kamar}
+                    onChange={(e) => setFormData({ ...formData, kamar: e.target.value })}
+                    placeholder="Ketik atau pilih kamar..."
+                    className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500"
+                  />
+                  <datalist id="kamar-suggestions">
+                    {availableKamars.map((kName) => (
+                      <option key={kName} value={kName} />
                     ))}
-                  </select>
+                  </datalist>
                 </div>
               </div>
 
-              {/* Rayon & Wali */}
+              {/* Kelas Madin & Wali */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <label className="font-semibold text-slate-700 block mb-1">
-                    Rayon / Daerah Asal
+                    Kelas Madin
                   </label>
                   <input
-                    id="form-rayon"
+                    id="form-kelas-madin"
                     type="text"
-                    value={formData.rayon}
-                    onChange={(e) => setFormData({ ...formData, rayon: e.target.value })}
-                    placeholder="Contoh: Surabaya, Sidoarjo..."
+                    list="madin-suggestions"
+                    value={formData.kelas_madin}
+                    onChange={(e) =>
+                      setFormData({
+                        ...formData,
+                        kelas_madin: e.target.value,
+                        rayon: e.target.value,
+                      })
+                    }
+                    placeholder="Contoh: Ula 1, Wustho 2, dll."
                     className="w-full px-3 py-2 rounded-xl border border-slate-300 text-xs focus:ring-2 focus:ring-emerald-500"
                   />
+                  <datalist id="madin-suggestions">
+                    {availableMadins.map((mName) => (
+                      <option key={mName} value={mName} />
+                    ))}
+                  </datalist>
                 </div>
 
                 <div>

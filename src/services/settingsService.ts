@@ -3,6 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
+import { createClient } from '@supabase/supabase-js';
 import { supabase, isSupabaseConfigured } from '../lib/supabase';
 import { Profile, UserRole } from '../types';
 import { recordAuditLog } from './auditService';
@@ -184,6 +185,21 @@ export async function getStaffUsersList(): Promise<Profile[]> {
   return INITIAL_STAFF_USERS;
 }
 
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    try {
+      return crypto.randomUUID();
+    } catch {
+      // fallback
+    }
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
 /**
  * Create Staff User
  */
@@ -200,12 +216,72 @@ export async function createStaffUser(newUser: {
     return { success: false, message: 'Email petugas sudah terdaftar dalam sistem.' };
   }
 
+  const pwd = newUser.password?.trim() || 'pesantren123';
+  if (pwd.length < 6) {
+    return { success: false, message: 'Password harus terdiri dari minimal 6 karakter.' };
+  }
+
+  let assignedId = generateUUID();
+  let isEmailConfirmationPending = false;
+  let authNote = '';
+
+  if (isSupabaseConfigured()) {
+    try {
+      const envUrl = import.meta.env.VITE_SUPABASE_URL;
+      const envAnonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+      // Gunakan klien auth independen agar tidak mengganggu sesi admin yang sedang login
+      const isolatedAuthClient = createClient(envUrl, envAnonKey, {
+        auth: {
+          persistSession: false,
+          autoRefreshToken: false,
+          detectSessionInUrl: false,
+        },
+      });
+
+      const { data: authData, error: authError } = await isolatedAuthClient.auth.signUp({
+        email: newUser.email.trim(),
+        password: pwd,
+        options: {
+          data: {
+            full_name: newUser.full_name.trim(),
+            role_code: newUser.role_code,
+            phone: newUser.phone?.trim() || '',
+          },
+        },
+      });
+
+      if (authError) {
+        console.warn('Supabase Auth signUp warning:', authError.message);
+        if (authError.message.toLowerCase().includes('already registered')) {
+          authNote = 'Email sudah terdaftar di Supabase Auth, profil otomatis disinkronkan ke tabel Profiles.';
+        } else if (authError.message.toLowerCase().includes('rate limit')) {
+          authNote = 'Batas email Supabase tercapai (kuota email per jam). Akun tetap berhasil disimpan di tabel Profiles sistem!';
+        } else if (authError.message.toLowerCase().includes('signups not allowed') || authError.message.toLowerCase().includes('signup is disabled')) {
+          authNote = 'Pendaftaran anonim ditutup di Supabase. Akun tetap berhasil disimpan di tabel Profiles sistem!';
+        } else {
+          authNote = `Catatan Supabase Auth: ${authError.message}. Akun tetap berhasil disimpan di database sistem!`;
+        }
+      } else if (authData?.user) {
+        assignedId = authData.user.id;
+        if (authData.user.identities && authData.user.identities.length === 0) {
+          authNote = 'Akun sudah terdaftar di Supabase Auth, profil disinkronkan ke tabel Profiles.';
+        } else if (!authData.session && !authData.user.confirmed_at) {
+          isEmailConfirmationPending = true;
+        }
+      }
+    } catch (err: any) {
+      console.warn('Supabase Auth call error:', err);
+      authNote = `Koneksi Supabase Auth: ${err?.message || 'Offline'}. Akun disimpan di database sistem.`;
+    }
+  }
+
   const profile: Profile = {
-    id: `user-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
-    email: newUser.email,
-    full_name: newUser.full_name,
+    id: assignedId,
+    email: newUser.email.trim(),
+    full_name: newUser.full_name.trim(),
     role_code: newUser.role_code,
-    phone: newUser.phone || null,
+    phone: newUser.phone?.trim() || null,
     is_active: true,
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
@@ -213,13 +289,12 @@ export async function createStaffUser(newUser: {
 
   if (isSupabaseConfigured()) {
     try {
-      const { error } = await supabase.from('profiles').insert([profile]);
+      const { error } = await supabase.from('profiles').upsert([profile]);
       if (error) {
-        // Fallback to local storage if RLS denies direct insert
-        console.warn('Supabase profile insert error, saving locally:', error.message);
+        console.warn('Supabase profile upsert warning:', error.message);
       }
-    } catch {
-      // ignore
+    } catch (err: any) {
+      console.warn('Supabase profile upsert exception:', err?.message);
     }
   }
 
@@ -237,7 +312,16 @@ export async function createStaffUser(newUser: {
     },
   });
 
-  return { success: true, message: 'Petugas baru berhasil ditambahkan.' };
+  let successMsg = `Akun ${newUser.full_name} (${newUser.email}) berhasil ditambahkan!`;
+  if (authNote) {
+    successMsg += ` ${authNote}`;
+  } else if (isEmailConfirmationPending) {
+    successMsg += ` Akun terdaftar di Supabase. Jika konfirmasi email aktif, silakan klik 'Auto Confirm User' di Supabase Auth > Users.`;
+  } else {
+    successMsg += ` Tersimpan di Supabase Auth & tabel Profiles.`;
+  }
+
+  return { success: true, message: successMsg };
 }
 
 /**

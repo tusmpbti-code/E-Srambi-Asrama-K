@@ -32,6 +32,7 @@ import {
   Kelas,
   Kamar,
   Santri,
+  getSantriKamarText,
 } from '../types';
 import { getPermissions } from '../services/permissionService';
 import { getTodayDateString } from '../services/attendanceService';
@@ -131,7 +132,14 @@ export const LaporanPerizinanSection: React.FC<LaporanPerizinanSectionProps> = (
       if (filterJenis !== 'SEMUA' && item.jenis !== filterJenis) return false;
       if (filterStatus !== 'SEMUA' && item.status !== filterStatus) return false;
       if (filterKelas !== 'SEMUA' && item.santri?.kelas_id !== filterKelas) return false;
-      if (filterKamar !== 'SEMUA' && item.santri?.kamar_id !== filterKamar) return false;
+      const santriKamar = getSantriKamarText(item.santri);
+      if (
+        filterKamar !== 'SEMUA' &&
+        item.santri?.kamar_id !== filterKamar &&
+        santriKamar !== filterKamar
+      ) {
+        return false;
+      }
 
       // 3. Search query
       if (searchQuery.trim()) {
@@ -142,7 +150,7 @@ export const LaporanPerizinanSection: React.FC<LaporanPerizinanSectionProps> = (
         const matchAlasan = item.alasan.toLowerCase().includes(q);
         const matchWali = item.penanggung_jawab.toLowerCase().includes(q);
         const matchKelas = item.santri?.kelas?.nama_kelas.toLowerCase().includes(q);
-        const matchKamar = item.santri?.kamar?.nama_kamar.toLowerCase().includes(q);
+        const matchKamar = santriKamar.toLowerCase().includes(q);
         if (!matchName && !matchId && !matchTujuan && !matchAlasan && !matchWali && !matchKelas && !matchKamar) {
           return false;
         }
@@ -202,7 +210,7 @@ export const LaporanPerizinanSection: React.FC<LaporanPerizinanSectionProps> = (
     if (preset === 'berdasarkan_kamar') {
       const map = new Map<string, { label: string; count: number; terlambat: number; belumKembali: number }>();
       filteredData.forEach((p) => {
-        const kmr = p.santri?.kamar?.nama_kamar || 'Tanpa Kamar';
+        const kmr = getSantriKamarText(p.santri) || 'Tanpa Kamar';
         if (!map.has(kmr)) {
           map.set(kmr, { label: kmr, count: 0, terlambat: 0, belumKembali: 0 });
         }
@@ -275,7 +283,7 @@ export const LaporanPerizinanSection: React.FC<LaporanPerizinanSectionProps> = (
       p.santri?.id_yys || '',
       `"${p.santri?.nama || ''}"`,
       `"${p.santri?.kelas?.nama_kelas || ''}"`,
-      `"${p.santri?.kamar?.nama_kamar || ''}"`,
+      `"${getSantriKamarText(p.santri)}"`,
       p.jenis === 'IZIN_PULANG' ? 'Izin Pulang' : 'Izin Keluar',
       `"${p.alasan.replace(/"/g, '""')}"`,
       `"${p.tujuan.replace(/"/g, '""')}"`,
@@ -657,8 +665,8 @@ export const LaporanPerizinanSection: React.FC<LaporanPerizinanSectionProps> = (
             >
               <option value="SEMUA">Semua Kamar</option>
               {kamarList.map((kmr) => (
-                <option key={kmr.id} value={kmr.id}>
-                  {kmr.nama_kamar} - {kmr.gedung}
+                <option key={kmr.id} value={kmr.nama_kamar}>
+                  {kmr.nama_kamar}
                 </option>
               ))}
             </select>
@@ -786,7 +794,7 @@ export const LaporanPerizinanSection: React.FC<LaporanPerizinanSectionProps> = (
                       <td className="py-3.5 px-4 text-slate-700">
                         <div>
                           <span className="font-medium block">{item.santri?.kelas?.nama_kelas || '-'}</span>
-                          <span className="text-[11px] text-slate-500">{item.santri?.kamar?.nama_kamar || '-'}</span>
+                          <span className="text-[11px] text-slate-500">{getSantriKamarText(item.santri) ? `Kamar ${getSantriKamarText(item.santri)}` : '-'}</span>
                         </div>
                       </td>
 

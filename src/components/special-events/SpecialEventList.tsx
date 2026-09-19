@@ -17,7 +17,7 @@ import {
   Clock,
   Trash2,
 } from 'lucide-react';
-import { SpecialEvent, SpecialEventStatus } from '../../types';
+import { SpecialEvent, SpecialEventStatus, getSpecialEventAttendanceModelLabel } from '../../types';
 
 interface SpecialEventListProps {
   events: SpecialEvent[];
@@ -217,16 +217,18 @@ export const SpecialEventList: React.FC<SpecialEventListProps> = ({
                       </span>
                     </div>
                     <div className="flex items-center gap-2">
-                      <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                      <span>Absensi: {ev.jenis_absensi.replace('_', ' + ')}</span>
+                      <Clock className="w-3.5 h-3.5 text-purple-600 shrink-0" />
+                      <span className="font-semibold text-purple-900 bg-purple-50 px-2 py-0.5 rounded border border-purple-200">
+                        {getSpecialEventAttendanceModelLabel(ev.jenis_absensi)}
+                      </span>
                     </div>
-                    {ev.jenis_absensi === 'BERANGKAT_KEMBALI' && (
-                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] font-medium text-purple-700">
-                        <span className="bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
-                          Batas Berangkat: <strong>{ev.jam_batas_berangkat || '08:00'} WIB</strong>
+                    {ev.jenis_absensi !== 'SEKALI' && (
+                      <div className="flex flex-wrap items-center gap-1.5 pt-0.5 text-[11px] font-medium text-slate-700">
+                        <span className="bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                          Berangkat: <strong>{ev.jam_berangkat || ev.jam_batas_berangkat || '08:00'} WIB</strong>
                         </span>
-                        <span className="bg-purple-50 px-2 py-0.5 rounded-md border border-purple-100">
-                          Batas Kembali: <strong>{ev.jam_batas_kembali || '17:00'} WIB</strong>
+                        <span className="bg-slate-50 px-2 py-0.5 rounded-md border border-slate-200">
+                          Kembali: <strong>{ev.jam_kembali || ev.jam_batas_kembali || '17:00'} WIB</strong>
                         </span>
                       </div>
                     )}

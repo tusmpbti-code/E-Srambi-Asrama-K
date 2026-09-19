@@ -18,7 +18,7 @@ import {
   Sparkles,
   Zap,
 } from 'lucide-react';
-import { Santri } from '../../types';
+import { Santri, getSantriKamarText } from '../../types';
 import { findSantriByBarcode, getSantriList } from '../../services/santriService';
 
 export type ScannerMode =
@@ -320,7 +320,7 @@ export const UnifiedBarcodeScanner: React.FC<UnifiedBarcodeScannerProps> = ({
                 <div>
                   <div className="text-sm font-bold text-zinc-900">{lastScanned.nama}</div>
                   <div className="text-xs text-zinc-500">
-                    {lastScanned.kelas?.nama_kelas || 'Kelas'} • {lastScanned.kamar?.nama_kamar || 'Kamar'}
+                    {lastScanned.kelas?.nama_kelas || 'Kelas'} • {getSantriKamarText(lastScanned) ? (getSantriKamarText(lastScanned).startsWith('Kamar') ? getSantriKamarText(lastScanned) : `Kamar ${getSantriKamarText(lastScanned)}`) : 'Kamar -'}
                   </div>
                 </div>
               </div>

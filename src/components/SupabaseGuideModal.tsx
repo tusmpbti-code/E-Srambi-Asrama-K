@@ -27,7 +27,7 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
   onClose,
 }) => {
   const [copied, setCopied] = useState(false);
-  const [activeTab, setActiveTab] = useState<'env' | 'schema' | 'netlify'>('env');
+  const [activeTab, setActiveTab] = useState<'env' | 'rombak_kamar' | 'schema' | 'netlify'>('rombak_kamar');
 
   if (!isOpen) return null;
 
@@ -43,6 +43,69 @@ export const SupabaseGuideModal: React.FC<SupabaseGuideModalProps> = ({
   const sampleEnvText = `# Supabase Configuration (.env)
 VITE_SUPABASE_URL=https://your-project.supabase.co
 VITE_SUPABASE_ANON_KEY=your-supabase-anon-key-here`;
+
+  const rombakKamarSql = `-- ==============================================================================
+-- SCRIPT ROMBAK TABEL SANTRI & KAMAR SUPABASE
+-- ==============================================================================
+-- 1. Tambah kolom kamar langsung ke tabel santri jika belum ada
+ALTER TABLE public.santri ADD COLUMN IF NOT EXISTS kamar VARCHAR(100);
+ALTER TABLE public.santri ADD COLUMN IF NOT EXISTS kelas_nama VARCHAR(100);
+ALTER TABLE public.santri ADD COLUMN IF NOT EXISTS kelas_madin VARCHAR(100);
+
+-- 2. Jadikan kamar_id dan kelas_id bersifat opsional (nullable)
+ALTER TABLE public.santri ALTER COLUMN kamar_id DROP NOT NULL;
+ALTER TABLE public.santri ALTER COLUMN kelas_id DROP NOT NULL;
+
+-- 3. Sinkronisasi nama kamar dari relasi kamar_id jika sebelumnya terhubung
+UPDATE public.santri s
+SET kamar = k.nama_kamar
+FROM public.kamar k
+WHERE s.kamar_id = k.id AND (s.kamar IS NULL OR s.kamar = '');
+
+-- 4. Sinkronisasi rayon <-> kelas_madin
+UPDATE public.santri SET kelas_madin = rayon WHERE (kelas_madin IS NULL OR kelas_madin = '') AND rayon IS NOT NULL;
+UPDATE public.santri SET rayon = kelas_madin WHERE (rayon IS NULL OR rayon = '') AND kelas_madin IS NOT NULL;
+
+-- 5. Buat index pencarian cepat
+CREATE INDEX IF NOT EXISTS idx_santri_kamar ON public.santri(kamar);
+CREATE INDEX IF NOT EXISTS idx_santri_kelas_madin ON public.santri(kelas_madin);
+
+-- 6. Trigger Otomatis: mendaftarkan kamar baru dari CSV/Excel (seperti 'K - 04') ke master tabel kamar
+CREATE OR REPLACE FUNCTION public.sync_santri_kamar_to_master()
+RETURNS TRIGGER AS $$
+DECLARE
+    v_kamar_id UUID;
+    v_clean_kamar VARCHAR(100);
+BEGIN
+    v_clean_kamar := NULLIF(TRIM(NEW.kamar), '');
+    IF v_clean_kamar IS NOT NULL THEN
+        INSERT INTO public.kamar (nama_kamar, gedung, kapasitas)
+        VALUES (v_clean_kamar, 'Asrama Pondok', 20)
+        ON CONFLICT (nama_kamar) DO NOTHING;
+        
+        SELECT id INTO v_kamar_id FROM public.kamar WHERE LOWER(nama_kamar) = LOWER(v_clean_kamar) LIMIT 1;
+        NEW.kamar_id := v_kamar_id;
+        NEW.kamar := v_clean_kamar;
+    END IF;
+
+    IF NEW.kelas_madin IS NOT NULL AND NEW.rayon IS NULL THEN
+        NEW.rayon := NEW.kelas_madin;
+    ELSIF NEW.rayon IS NOT NULL AND NEW.kelas_madin IS NULL THEN
+        NEW.kelas_madin := NEW.rayon;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+DROP TRIGGER IF EXISTS trg_sync_santri_kamar ON public.santri;
+CREATE TRIGGER trg_sync_santri_kamar
+    BEFORE INSERT OR UPDATE OF kamar, rayon, kelas_madin ON public.santri
+    FOR EACH ROW
+    EXECUTE FUNCTION public.sync_santri_kamar_to_master();
+
+-- 7. Pastikan hak akses penuh terbuka
+GRANT ALL ON public.santri TO anon, authenticated;
+GRANT ALL ON public.kamar TO anon, authenticated;`;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">
@@ -101,41 +164,94 @@ VITE_SUPABASE_ANON_KEY=your-supabase-anon-key-here`;
         </div>
 
         {/* Tabs */}
-        <div className="flex border-b border-slate-200 text-xs">
+        <div className="flex border-b border-slate-200 text-xs overflow-x-auto">
+          <button
+            type="button"
+            onClick={() => setActiveTab('rombak_kamar')}
+            className={`px-4 py-2 font-semibold border-b-2 transition-colors whitespace-nowrap flex items-center gap-1.5 ${
+              activeTab === 'rombak_kamar'
+                ? 'border-emerald-600 text-emerald-700'
+                : 'border-transparent text-slate-500 hover:text-slate-700'
+            }`}
+          >
+            <span>1. Rombak Tabel Kamar</span>
+            <span className="px-1.5 py-0.2 rounded-full text-[10px] bg-amber-100 text-amber-800 font-bold">
+              Penting
+            </span>
+          </button>
           <button
             type="button"
             onClick={() => setActiveTab('env')}
-            className={`px-4 py-2 font-semibold border-b-2 transition-colors ${
+            className={`px-4 py-2 font-semibold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'env'
                 ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            1. Environment Variables
+            2. Environment Variables
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('schema')}
-            className={`px-4 py-2 font-semibold border-b-2 transition-colors ${
+            className={`px-4 py-2 font-semibold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'schema'
                 ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            2. SQL Schema & RLS
+            3. SQL Schema Awal & RLS
           </button>
           <button
             type="button"
             onClick={() => setActiveTab('netlify')}
-            className={`px-4 py-2 font-semibold border-b-2 transition-colors ${
+            className={`px-4 py-2 font-semibold border-b-2 transition-colors whitespace-nowrap ${
               activeTab === 'netlify'
                 ? 'border-emerald-600 text-emerald-700'
                 : 'border-transparent text-slate-500 hover:text-slate-700'
             }`}
           >
-            3. Netlify & GitHub
+            4. Netlify & GitHub
           </button>
         </div>
+
+        {/* Tab 1: Rombak Tabel Kamar & Santri (PENTING) */}
+        {activeTab === 'rombak_kamar' && (
+          <div className="space-y-3 text-xs">
+            <div className="p-3 bg-emerald-50 rounded-xl border border-emerald-200 text-emerald-900 space-y-1">
+              <p className="font-bold text-emerald-950 flex items-center gap-1.5">
+                <Check className="w-4 h-4 text-emerald-600" />
+                <span>Rombak Tabel Santri & Kamar Sesuai Berkas Unggahan</span>
+              </p>
+              <p className="text-[11px] leading-relaxed text-emerald-800">
+                Script ini menambahkan kolom <strong>kamar</strong> langsung pada tabel santri Supabase agar data kamar (seperti <em>&quot;K - 04&quot;</em>) langsung tersimpan permanen dan otomatis terdaftar di master kamar tanpa perlu diatur ulang manual!
+              </p>
+            </div>
+
+            <div className="relative">
+              <pre className="bg-slate-900 text-slate-100 p-3.5 rounded-xl font-mono text-[10px] sm:text-[11px] max-h-56 overflow-y-auto overflow-x-auto leading-relaxed">
+                {rombakKamarSql}
+              </pre>
+              <button
+                type="button"
+                onClick={() => handleCopy(rombakKamarSql)}
+                className="absolute right-2 top-2 px-3 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-xs transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Berhasil Disalin!' : 'Salin Script SQL'}</span>
+              </button>
+            </div>
+
+            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1.5">
+              <p className="font-semibold text-slate-800">Langkah Menjalankan di Supabase:</p>
+              <ol className="list-decimal list-inside space-y-1 text-slate-600 text-[11px]">
+                <li>Buka dashboard proyek Anda di <strong>supabase.com</strong>.</li>
+                <li>Pilih menu <strong>SQL Editor</strong> di sidebar kiri.</li>
+                <li>Klik tombol <strong>&quot;Salin Script SQL&quot;</strong> di atas, lalu tempel (Paste) ke editor.</li>
+                <li>Klik tombol <strong>Run</strong> (atau tekan Ctrl + Enter). Selesai!</li>
+              </ol>
+            </div>
+          </div>
+        )}
 
         {/* Tab 1: Environment Variables */}
         {activeTab === 'env' && (

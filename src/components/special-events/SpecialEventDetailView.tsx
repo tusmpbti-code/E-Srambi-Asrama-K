@@ -30,6 +30,7 @@ import {
   LogOut,
   LogIn,
   RefreshCw,
+  Moon,
 } from 'lucide-react';
 import { Html5Qrcode } from 'html5-qrcode';
 import {
@@ -40,6 +41,8 @@ import {
   Santri,
   Kelas,
   Kamar,
+  getSantriKamarText,
+  getSpecialEventAttendanceModelLabel,
 } from '../../types';
 import {
   getEventParticipants,
@@ -332,7 +335,7 @@ export const SpecialEventDetailView: React.FC<SpecialEventDetailViewProps> = ({
         s?.id_yys || '',
         `"${s?.nama || ''}"`,
         `"${s?.kelas?.nama_kelas || ''}"`,
-        `"${s?.kamar?.nama_kamar || ''}"`,
+        `"${getSantriKamarText(s) || ''}"`,
         `"${p.atribut_khusus || ''}"`,
         selectedTanggal,
         att?.waktu_berangkat
@@ -433,21 +436,37 @@ export const SpecialEventDetailView: React.FC<SpecialEventDetailViewProps> = ({
             {event.tanggal_mulai} s.d. {event.tanggal_selesai}
           </span>
         </div>
-        {event.jenis_absensi === 'BERANGKAT_KEMBALI' && (
-          <>
-            <div className="flex items-center gap-1.5 bg-purple-100/70 text-purple-900 px-2.5 py-1 rounded-lg border border-purple-200">
-              <Clock className="w-3.5 h-3.5 text-purple-700" />
-              <span>
-                Batas Berangkat: <strong>{event.jam_batas_berangkat || '08:00'} WIB</strong>
-              </span>
-            </div>
-            <div className="flex items-center gap-1.5 bg-indigo-100/70 text-indigo-900 px-2.5 py-1 rounded-lg border border-indigo-200">
-              <Clock className="w-3.5 h-3.5 text-indigo-700" />
-              <span>
-                Batas Kembali: <strong>{event.jam_batas_kembali || '17:00'} WIB</strong>
-              </span>
-            </div>
-          </>
+
+        {/* Model Absensi Badge */}
+        <div className="flex items-center gap-1.5 bg-purple-50 text-purple-900 px-2.5 py-1 rounded-lg border border-purple-200 font-semibold">
+          <Clock className="w-3.5 h-3.5 text-purple-600" />
+          <span>Model: {getSpecialEventAttendanceModelLabel(event.jenis_absensi)}</span>
+        </div>
+
+        {/* Overnight Menginap Badge */}
+        {(event.is_menginap || (event.durasi_malam && event.durasi_malam >= 1)) && (
+          <div className="flex items-center gap-1.5 bg-purple-100 text-purple-900 px-2.5 py-1 rounded-lg border border-purple-300 font-bold">
+            <Moon className="w-3.5 h-3.5 text-purple-700" />
+            <span>Menginap {event.durasi_malam ? `${event.durasi_malam} Malam` : '≥ 1 Malam'}</span>
+          </div>
+        )}
+
+        {(event.jam_berangkat || event.jam_batas_berangkat) && (
+          <div className="flex items-center gap-1.5 bg-purple-100/70 text-purple-900 px-2.5 py-1 rounded-lg border border-purple-200">
+            <Clock className="w-3.5 h-3.5 text-purple-700" />
+            <span>
+              Jam Berangkat: <strong>{event.jam_berangkat || event.jam_batas_berangkat} WIB</strong>
+            </span>
+          </div>
+        )}
+
+        {(event.jam_kembali || event.jam_batas_kembali) && (
+          <div className="flex items-center gap-1.5 bg-indigo-100/70 text-indigo-900 px-2.5 py-1 rounded-lg border border-indigo-200">
+            <Clock className="w-3.5 h-3.5 text-indigo-700" />
+            <span>
+              Jam Kembali: <strong>{event.jam_kembali || event.jam_batas_kembali} WIB</strong>
+            </span>
+          </div>
         )}
         {event.keterangan && (
           <div className="flex items-center gap-1.5 text-slate-500">
@@ -719,63 +738,84 @@ export const SpecialEventDetailView: React.FC<SpecialEventDetailViewProps> = ({
           <div className="lg:col-span-6 space-y-4">
             {/* Mode Action Selector */}
             <div className="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200 shadow-xs space-y-3">
-              <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
-                Pilih Mode Scan Absensi:
-              </label>
-
-              <div className="grid grid-cols-3 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setScanMode('BERANGKAT')}
-                  className={`py-3 px-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
-                    scanMode === 'BERANGKAT'
-                      ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-300'
-                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  <LogOut className="w-4 h-4" />
-                  <span>BERANGKAT</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setScanMode('KEMBALI')}
-                  className={`py-3 px-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
-                    scanMode === 'KEMBALI'
-                      ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-300'
-                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  <LogIn className="w-4 h-4" />
-                  <span>KEMBALI</span>
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setScanMode('AUTO')}
-                  className={`py-3 px-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
-                    scanMode === 'AUTO'
-                      ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-300'
-                      : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
-                  }`}
-                >
-                  <Sparkles className="w-4 h-4" />
-                  <span>OTOMATIS</span>
-                </button>
+              <div className="flex items-center justify-between">
+                <label className="text-xs font-bold text-slate-800 uppercase tracking-wider block">
+                  Mode Scan Absensi:
+                </label>
+                <span className="text-[11px] font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full border border-purple-200">
+                  {getSpecialEventAttendanceModelLabel(event.jenis_absensi)}
+                </span>
               </div>
 
+              {event.jenis_absensi === 'SEKALI' ? (
+                <div className="p-3 bg-purple-50/80 rounded-xl border border-purple-200 text-xs text-purple-900 flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-purple-600 text-white flex items-center justify-center font-bold shrink-0">
+                    <Sparkles className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <span className="font-bold block">Sekali (Cek Kehadiran Saja)</span>
+                    <span className="text-[11px] text-purple-700">
+                      Scan santri untuk mencatat kehadiran kegiatan khusus satu kali.
+                    </span>
+                  </div>
+                </div>
+              ) : (
+                <div className="grid grid-cols-3 gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setScanMode('BERANGKAT')}
+                    className={`py-3 px-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                      scanMode === 'BERANGKAT'
+                        ? 'bg-blue-600 text-white shadow-md ring-2 ring-blue-300'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    <LogOut className="w-4 h-4" />
+                    <span>BERANGKAT</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScanMode('KEMBALI')}
+                    className={`py-3 px-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                      scanMode === 'KEMBALI'
+                        ? 'bg-emerald-600 text-white shadow-md ring-2 ring-emerald-300'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    <LogIn className="w-4 h-4" />
+                    <span>KEMBALI</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setScanMode('AUTO')}
+                    className={`py-3 px-3 rounded-xl text-xs font-bold flex flex-col items-center justify-center gap-1 transition-all ${
+                      scanMode === 'AUTO'
+                        ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-300'
+                        : 'bg-slate-50 text-slate-700 hover:bg-slate-100 border border-slate-200'
+                    }`}
+                  >
+                    <Sparkles className="w-4 h-4" />
+                    <span>OTOMATIS</span>
+                  </button>
+                </div>
+              )}
+
               <div className="text-[11px] text-slate-500 bg-slate-50 p-2.5 rounded-xl border border-slate-200/80">
-                {scanMode === 'BERANGKAT' && (
+                {event.jenis_absensi === 'SEKALI' ? (
                   <span>
-                    <strong>Mode Berangkat:</strong> Scan mencatat waktu keberangkatan santri menuju lokasi kegiatan.
+                    <strong>Cek Kehadiran:</strong> Pemindaian mencatat kehadiran peserta secara langsung ke rekapitulasi.
                   </span>
-                )}
-                {scanMode === 'KEMBALI' && (
+                ) : scanMode === 'BERANGKAT' ? (
+                  <span>
+                    <strong>Mode Berangkat:</strong> Scan mencatat waktu keberangkatan santri menuju lokasi kegiatan ({event.jenis_absensi === 'BERANGKAT_KEMBALI_MENGINAP' ? 'Menginap' : 'Harian'}).
+                  </span>
+                ) : scanMode === 'KEMBALI' ? (
                   <span>
                     <strong>Mode Kembali:</strong> Scan mencatat kepulangan santri ke pondok pesantren. (Hanya santri yang sudah berangkat yang dapat kembali).
                   </span>
-                )}
-                {scanMode === 'AUTO' && (
+                ) : (
                   <span>
                     <strong>Mode Otomatis:</strong> Sistem otomatis mendeteksi: jika belum berangkat $\rightarrow$ BERANGKAT; jika sudah berangkat $\rightarrow$ KEMBALI.
                   </span>
@@ -1136,7 +1176,7 @@ export const SpecialEventDetailView: React.FC<SpecialEventDetailViewProps> = ({
                             {p.santri?.kelas?.nama_kelas || '-'}
                           </span>
                           <span className="text-[11px] text-slate-500">
-                            {p.santri?.kamar?.nama_kamar || '-'}
+                            {getSantriKamarText(p.santri) ? (getSantriKamarText(p.santri).startsWith('Kamar') ? getSantriKamarText(p.santri) : `Kamar ${getSantriKamarText(p.santri)}`) : '-'}
                           </span>
                         </div>
                       </td>
@@ -1238,7 +1278,7 @@ export const SpecialEventDetailView: React.FC<SpecialEventDetailViewProps> = ({
                             {p.santri?.kelas?.nama_kelas || '-'}
                           </span>
                           <span className="text-[11px] text-slate-500">
-                            {p.santri?.kamar?.nama_kamar || '-'}
+                            {getSantriKamarText(p.santri) ? (getSantriKamarText(p.santri).startsWith('Kamar') ? getSantriKamarText(p.santri) : `Kamar ${getSantriKamarText(p.santri)}`) : '-'}
                           </span>
                         </div>
                       </td>

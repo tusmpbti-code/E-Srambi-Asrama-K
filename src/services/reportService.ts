@@ -12,6 +12,8 @@ import {
   SpecialAttendanceRecord,
   SpecialEvent,
   SpecialEventParticipant,
+  getSantriKamarText,
+  getSantriMadinText,
 } from '../types';
 import { getSantriList, getKegiatanList } from './santriService';
 import { getSpecialEvents } from './specialEventService';
@@ -55,8 +57,14 @@ function applySantriFilters(
   if (!santri) return false;
   if (filter.santriId && filter.santriId !== 'SEMUA' && santri.id !== filter.santriId) return false;
   if (filter.kelasId && filter.kelasId !== 'SEMUA' && santri.kelas_id !== filter.kelasId) return false;
-  if (filter.kamarId && filter.kamarId !== 'SEMUA' && santri.kamar_id !== filter.kamarId) return false;
-  if (filter.rayon && filter.rayon !== 'SEMUA' && santri.rayon !== filter.rayon) return false;
+  if (filter.kamarId && filter.kamarId !== 'SEMUA') {
+    const santriKamar = getSantriKamarText(santri);
+    if (santri.kamar_id !== filter.kamarId && santriKamar !== filter.kamarId) return false;
+  }
+  if (filter.rayon && filter.rayon !== 'SEMUA') {
+    const madin = getSantriMadinText(santri);
+    if (madin !== filter.rayon && santri.rayon !== filter.rayon) return false;
+  }
   if (filter.searchQuery) {
     const q = filter.searchQuery.toLowerCase();
     const matches =
@@ -165,8 +173,8 @@ export async function fetchAttendanceReport(
       nis: r.santri?.nis || '-',
       nama: r.santri?.nama || 'Santri',
       kelas: r.santri?.kelas?.nama_kelas || '-',
-      kamar: r.santri?.kamar?.nama_kamar || '-',
-      rayon: r.santri?.rayon || 'Pusat',
+      kamar: getSantriKamarText(r.santri) || '-',
+      rayon: getSantriMadinText(r.santri) || '-',
       kegiatanModul: r.kegiatan?.nama_kegiatan || 'Absensi Harian',
       subKategori: r.kegiatan?.kategori || kategori,
       status: r.status,
@@ -276,8 +284,8 @@ export async function fetchPermissionReport(
       nis: p.santri?.nis || '-',
       nama: p.santri?.nama || 'Santri',
       kelas: p.santri?.kelas?.nama_kelas || '-',
-      kamar: p.santri?.kamar?.nama_kamar || '-',
-      rayon: p.santri?.rayon || 'Pusat',
+      kamar: getSantriKamarText(p.santri) || '-',
+      rayon: getSantriMadinText(p.santri) || '-',
       kegiatanModul: p.jenis === 'IZIN_PULANG' ? 'Izin Pulang' : 'Izin Keluar',
       subKategori: p.alasan,
       status: isLate ? 'TERLAMBAT' : p.status,
@@ -387,8 +395,8 @@ export async function fetchSpecialEventsReport(
       nis: a.santri?.nis || '-',
       nama: a.santri?.nama || 'Santri',
       kelas: a.santri?.kelas?.nama_kelas || '-',
-      kamar: a.santri?.kamar?.nama_kamar || '-',
-      rayon: a.santri?.rayon || 'Pusat',
+      kamar: getSantriKamarText(a.santri) || '-',
+      rayon: getSantriMadinText(a.santri) || '-',
       kegiatanModul: a.event?.nama_kegiatan || (onlyPsg ? 'PSG' : 'Kegiatan Khusus'),
       subKategori: a.event?.jenis_kegiatan || 'Khusus',
       status: a.status,
@@ -445,8 +453,8 @@ export async function fetchRekapSantriReport(
       nis: s.nis || '-',
       nama: s.nama,
       kelas: s.kelas?.nama_kelas || 'Tanpa Kelas',
-      kamar: s.kamar?.nama_kamar || 'Tanpa Kamar',
-      rayon: s.rayon || 'Pusat',
+      kamar: getSantriKamarText(s) || 'Tanpa Kamar',
+      rayon: getSantriMadinText(s) || '-',
       kegiatanModul: 'Master Santri Pondok',
       subKategori: s.jenis_kelamin === 'L' ? 'Putra' : 'Putri',
       status: s.status_santri,

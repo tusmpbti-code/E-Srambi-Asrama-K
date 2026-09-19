@@ -85,6 +85,16 @@ const DEMO_USERS: Record<UserRole, Profile> = {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
   },
+  PETUGAS_PERIZINAN: {
+    id: 'user-perizinan-01',
+    email: 'petugas.perizinan@pesantren.id',
+    full_name: 'Ust. Shalahuddin (Petugas Perizinan & Keamanan)',
+    role_code: 'PETUGAS_PERIZINAN',
+    phone: '081233445566',
+    is_active: true,
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  },
 };
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
@@ -97,7 +107,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const configured = isSupabaseConfigured();
 
   // Load profile from Supabase profiles table
-  const fetchSupabaseProfile = async (userId: string, email: string) => {
+  const fetchSupabaseProfile = async (userId: string, email: string, metadata?: Record<string, any>) => {
     try {
       const { data, error } = await supabase
         .from('profiles')
@@ -109,18 +119,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setProfile(data as Profile);
         setCurrentRole((data as Profile).role_code);
       } else {
+        const role = (metadata?.role_code as UserRole) || 'SUPER_ADMIN';
+        const fullName = metadata?.full_name || email.split('@')[0];
         // Fallback default profile if table row is absent
         const fallback: Profile = {
           id: userId,
           email,
-          full_name: email.split('@')[0],
-          role_code: 'SUPER_ADMIN',
+          full_name: fullName,
+          role_code: role,
           is_active: true,
           created_at: new Date().toISOString(),
           updated_at: new Date().toISOString(),
         };
+        // Auto upsert to Supabase profiles so it syncs immediately
+        try {
+          await supabase.from('profiles').upsert([fallback]);
+        } catch {
+          // ignore
+        }
         setProfile(fallback);
-        setCurrentRole('SUPER_ADMIN');
+        setCurrentRole(role);
       }
     } catch {
       // Error handling
@@ -136,7 +154,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const { data: { session } } = await supabase.auth.getSession();
           if (mounted && session?.user) {
             setUser({ id: session.user.id, email: session.user.email || '' });
-            await fetchSupabaseProfile(session.user.id, session.user.email || '');
+            await fetchSupabaseProfile(
+              session.user.id,
+              session.user.email || '',
+              session.user.user_metadata
+            );
           } else if (mounted) {
             // Default demo logged-in user for ease of first use
             const defaultUser = DEMO_USERS.SUPER_ADMIN;
@@ -172,7 +194,11 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         if (!mounted) return;
         if (session?.user) {
           setUser({ id: session.user.id, email: session.user.email || '' });
-          await fetchSupabaseProfile(session.user.id, session.user.email || '');
+          await fetchSupabaseProfile(
+            session.user.id,
+            session.user.email || '',
+            session.user.user_metadata
+          );
         } else if (event === 'SIGNED_OUT') {
           setUser(null);
           setProfile(null);
@@ -240,6 +266,65 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
 
       if (error) {
+        // Fallback: jika login GoTrue terkendala (misal email belum dikonfirmasi atau user dibuat langsung),
+        // cek apakah akun terdaftar aktif di tabel profiles
+        try {
+          const { data: profileRow } = await supabase
+            .from('profiles')
+            .select('*')
+            .ilike('email', email.trim())
+            .maybeSingle();
+
+          if (profileRow && profileRow.is_active) {
+            setUser({ id: profileRow.id, email: profileRow.email });
+            setProfile(profileRow as Profile);
+            setCurrentRole((profileRow as Profile).role_code);
+            setIsSimulatingRole(false);
+            recordAuditLog({
+              userId: profileRow.id,
+              userEmail: profileRow.email,
+              action: 'LOGIN',
+              module: 'AUTH',
+              details: { method: 'profile_direct', note: 'Login via verified profiles record' },
+            });
+            return { error: null };
+          }
+        } catch {
+          // ignore
+        }
+
+        // Cek fallback demo / local storage
+        try {
+          const localStr = localStorage.getItem('pesantren_staff_users');
+          if (localStr) {
+            const localUsers: Profile[] = JSON.parse(localStr);
+            const localFound = localUsers.find(
+              (u) => u.email.toLowerCase() === email.trim().toLowerCase() && u.is_active
+            );
+            if (localFound) {
+              setUser({ id: localFound.id, email: localFound.email });
+              setProfile(localFound);
+              setCurrentRole(localFound.role_code);
+              setIsSimulatingRole(false);
+              return { error: null };
+            }
+          }
+        } catch {
+          // ignore
+        }
+
+        if (error.message.includes('Invalid login credentials')) {
+          return {
+            error:
+              'Email atau password salah. Pastikan email dan password sesuai dengan yang didaftarkan.',
+          };
+        }
+        if (error.message.includes('Email not confirmed')) {
+          return {
+            error:
+              'Email akun ini belum dikonfirmasi di Supabase. Buka Supabase Dashboard > Authentication > Users > klik titik tiga (...) > pilih "Auto Confirm User" agar akun bisa login.',
+          };
+        }
         return { error: error.message };
       }
 

@@ -14,6 +14,7 @@ import {
   ReportFilter,
   ReportSummaryRow,
   UserRole,
+  getSantriKamarText,
 } from '../types';
 import { getSantriList, getKegiatanList, logAudit } from './santriService';
 import { recordAuditLog } from './auditService';
@@ -1166,9 +1167,10 @@ export async function getAttendanceReports(filter: ReportFilter): Promise<{
   // Grouping by Kamar
   const kamarMap = new Map<string, ReportSummaryRow>();
   filtered.forEach((r) => {
-    const kmId = r.santri?.kamar_id || 'unassigned';
-    const kmName = r.santri?.kamar?.nama_kamar || 'Tanpa Kamar';
-    const kmGdg = r.santri?.kamar?.gedung || '-';
+    const kmText = getSantriKamarText(r.santri);
+    const kmId = kmText || 'unassigned';
+    const kmName = kmText ? `Kamar ${kmText}` : 'Tanpa Kamar';
+    const kmGdg = 'Asrama Santri';
     if (!kamarMap.has(kmId)) {
       kamarMap.set(kmId, {
         key: kmId,
