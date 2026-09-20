@@ -19,7 +19,7 @@ import {
   Info,
 } from 'lucide-react';
 import { Kamar, Santri } from '../../types';
-import { createKamar, deleteKamar } from '../../services/santriService';
+import { createKamar, deleteKamar, cleanupAllDummyData, isDummyKamar } from '../../services/santriService';
 import { useAuth } from '../../context/AuthContext';
 
 interface KamarManagementModalProps {
@@ -68,21 +68,51 @@ export const KamarManagementModal: React.FC<KamarManagementModalProps> = ({
     return map;
   }, [santriList]);
 
-  // Filtered kamar list
+  // Filtered kamar list (abaikan kamar dummy uji coba)
   const filteredKamar = useMemo(() => {
-    return kamarList.filter((k) => {
-      const matchSearch =
-        k.nama_kamar.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        k.gedung.toLowerCase().includes(searchQuery.toLowerCase());
-      const matchGender =
-        genderFilter === 'ALL' ||
-        !k.jenis_kelamin ||
-        k.jenis_kelamin === genderFilter;
-      return matchSearch && matchGender;
-    });
+    return kamarList
+      .filter((k) => !isDummyKamar(k.id, k.nama_kamar))
+      .filter((k) => {
+        const matchSearch =
+          k.nama_kamar.toLowerCase().includes(searchQuery.toLowerCase()) ||
+          k.gedung.toLowerCase().includes(searchQuery.toLowerCase());
+        const matchGender =
+          genderFilter === 'ALL' ||
+          !k.jenis_kelamin ||
+          k.jenis_kelamin === genderFilter;
+        return matchSearch && matchGender;
+      });
   }, [kamarList, searchQuery, genderFilter]);
 
   if (!isOpen) return null;
+
+  const handleCleanupDummy = async () => {
+    if (
+      !window.confirm(
+        'Hapus semua akun & data kamar dummy/uji coba bawaan template (seperti Al-Ghazali, Abu Bakar, dsb)?\n\nData santri dan kamar asli yang diimport tidak akan terhapus.'
+      )
+    ) {
+      return;
+    }
+
+    setIsSubmitting(true);
+    setFeedback(null);
+    try {
+      const res = await cleanupAllDummyData(profile?.email);
+      setFeedback({
+        type: 'success',
+        message: res.message,
+      });
+      await onKamarUpdated();
+    } catch (err: any) {
+      setFeedback({
+        type: 'error',
+        message: err.message || 'Gagal membersihkan data dummy.',
+      });
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const handleCreate = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -195,30 +225,44 @@ export const KamarManagementModal: React.FC<KamarManagementModalProps> = ({
         </div>
 
         {/* Tab Buttons */}
-        <div className="flex border-b border-slate-200 px-6 bg-slate-50 gap-4 pt-3">
+        <div className="flex items-center justify-between border-b border-slate-200 px-6 bg-slate-50 gap-4 pt-3">
+          <div className="flex gap-4">
+            <button
+              type="button"
+              onClick={() => setActiveTab('list')}
+              className={`pb-2.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
+                activeTab === 'list'
+                  ? 'border-amber-600 text-amber-800'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Building className="w-4 h-4" />
+              <span>Daftar Kamar ({filteredKamar.length})</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setActiveTab('add')}
+              className={`pb-2.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
+                activeTab === 'add'
+                  ? 'border-amber-600 text-amber-800'
+                  : 'border-transparent text-slate-500 hover:text-slate-700'
+              }`}
+            >
+              <Plus className="w-4 h-4" />
+              <span>+ Tambah Kamar Baru</span>
+            </button>
+          </div>
+
           <button
             type="button"
-            onClick={() => setActiveTab('list')}
-            className={`pb-2.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === 'list'
-                ? 'border-amber-600 text-amber-800'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
+            onClick={handleCleanupDummy}
+            disabled={isSubmitting}
+            title="Hapus data kamar dan akun uji coba bawaan template"
+            className="pb-2 text-xs font-semibold text-rose-600 hover:text-rose-800 flex items-center gap-1 hover:underline transition-colors"
           >
-            <Building className="w-4 h-4" />
-            <span>Daftar Kamar ({kamarList.length})</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setActiveTab('add')}
-            className={`pb-2.5 text-xs font-bold border-b-2 flex items-center gap-1.5 transition-colors ${
-              activeTab === 'add'
-                ? 'border-amber-600 text-amber-800'
-                : 'border-transparent text-slate-500 hover:text-slate-700'
-            }`}
-          >
-            <Plus className="w-4 h-4" />
-            <span>+ Tambah Kamar Baru</span>
+            <Trash2 className="w-3.5 h-3.5" />
+            <span className="hidden sm:inline">Bersihkan Kamar Dummy</span>
+            <span className="sm:hidden">Hapus Dummy</span>
           </button>
         </div>
 

@@ -9,13 +9,7 @@ import { Santri, Kelas, Kamar, Kegiatan, DashboardStats, StatusSantri } from '..
 // ==============================================================================
 // INITIAL REFERENCE DATA (Mirrored from /supabase/seed.sql)
 // ==============================================================================
-export const INITIAL_KAMAR: Kamar[] = [
-  { id: 'a0000000-0000-0000-0000-000000000001', nama_kamar: 'Al-Ghazali 01', gedung: 'Gedung Umar bin Khattab', kapasitas: 12, keterangan: 'Santri MTs Putra' },
-  { id: 'a0000000-0000-0000-0000-000000000002', nama_kamar: 'Al-Ghazali 02', gedung: 'Gedung Umar bin Khattab', kapasitas: 12, keterangan: 'Santri MTs Putra' },
-  { id: 'a0000000-0000-0000-0000-000000000003', nama_kamar: 'Ibnu Sina 01', gedung: 'Gedung Abu Bakar Ash-Shiddiq', kapasitas: 14, keterangan: 'Santri MA Putra' },
-  { id: 'a0000000-0000-0000-0000-000000000004', nama_kamar: 'Fathimah 01', gedung: 'Gedung Khadijah Al-Kubra', kapasitas: 10, keterangan: 'Santri Putri' },
-  { id: 'a0000000-0000-0000-0000-000000000005', nama_kamar: 'Aisyah 01', gedung: 'Gedung Khadijah Al-Kubra', kapasitas: 10, keterangan: 'Santri Putri' },
-];
+export const INITIAL_KAMAR: Kamar[] = [];
 
 export const INITIAL_KELAS: Kelas[] = [
   { id: 'b0000000-0000-0000-0000-000000000001', nama_kelas: 'Kelas 7-A MTs', tingkat: 'MTs', wali_kelas: 'Ust. Ahmad Dahlan, S.Pd.' },
@@ -36,122 +30,116 @@ export const INITIAL_KEGIATAN: Kegiatan[] = [
   { id: 'c0000000-0000-0000-0000-000000000008', nama_kegiatan: 'Apel Malam & Pengecekan Asrama', kategori: 'Asrama', waktu_mulai: '21:30', waktu_selesai: '22:00', lokasi: 'Halaman Asrama', deskripsi: 'Pengecekan santri di kamar masing-masing', is_active: true },
 ];
 
-export const INITIAL_SANTRI: Santri[] = [
-  {
-    id: 'd0000000-0000-0000-0000-000000000001',
-    id_yys: 'YYS202600123',
-    nama: 'Muhammad Farhan Al-Ghifari',
-    nis: 'NIS2026001',
-    jenis_kelamin: 'L',
-    kelas_id: 'b0000000-0000-0000-0000-000000000001',
-    kamar: 'Abu Bakar 1',
-    kamar_id: 'a0000000-0000-0000-0000-000000000001',
-    kelas_madin: 'Ula 1',
-    rayon: 'Ula 1',
-    status_santri: 'Aktif',
-    barcode_value: 'YYS202600123',
-    nama_wali: 'H. Bambang Sulistyo',
-    kontak_wali: '081234567890',
-    alamat: 'Jl. Rungkut Asri No. 12, Surabaya',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000002',
-    id_yys: 'YYS202600124',
-    nama: 'Ahmad Dani Ramadhan',
-    nis: 'NIS2026002',
-    jenis_kelamin: 'L',
-    kelas_id: 'b0000000-0000-0000-0000-000000000001',
-    kamar: 'Abu Bakar 1',
-    kamar_id: 'a0000000-0000-0000-0000-000000000001',
-    kelas_madin: 'Ula 1',
-    rayon: 'Ula 1',
-    status_santri: 'Aktif',
-    barcode_value: 'YYS202600124',
-    nama_wali: 'Ir. H. Gunawan Wibisono',
-    kontak_wali: '081298765432',
-    alamat: 'Pondok Jati Blok BC-14, Sidoarjo',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000003',
-    id_yys: 'YYS202600125',
-    nama: 'Nabil Fikri Robbani',
-    nis: 'NIS2026003',
-    jenis_kelamin: 'L',
-    kelas_id: 'b0000000-0000-0000-0000-000000000002',
-    kamar: 'Abu Bakar 2',
-    kamar_id: 'a0000000-0000-0000-0000-000000000002',
-    kelas_madin: 'Ula 2',
-    rayon: 'Ula 2',
-    status_santri: 'Aktif',
-    barcode_value: 'YYS202600125',
-    nama_wali: 'K.H. Masduki Syahid',
-    kontak_wali: '081333444555',
-    alamat: 'Jl. KH. Kholil No. 45, Gresik',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000004',
-    id_yys: 'YYS202600126',
-    nama: 'Zayyan Arka Pratama',
-    nis: 'NIS2026004',
-    jenis_kelamin: 'L',
-    kelas_id: 'b0000000-0000-0000-0000-000000000003',
-    kamar: 'Utsman 1',
-    kamar_id: 'a0000000-0000-0000-0000-000000000003',
-    kelas_madin: 'Wustho 1',
-    rayon: 'Wustho 1',
-    status_santri: 'Izin',
-    barcode_value: 'YYS202600126',
-    nama_wali: 'Drs. Supriyadi, M.M.',
-    kontak_wali: '081222333444',
-    alamat: 'Jl. Sulfat Indah No. 8, Malang',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000005',
-    id_yys: 'YYS202600127',
-    nama: 'Aisyah Putri Humaira',
-    nis: 'NIS2026005',
-    jenis_kelamin: 'P',
-    kelas_id: 'b0000000-0000-0000-0000-000000000001',
-    kamar: 'Khadijah 1',
-    kamar_id: 'a0000000-0000-0000-0000-000000000004',
-    kelas_madin: 'Ula 1',
-    rayon: 'Ula 1',
-    status_santri: 'Aktif',
-    barcode_value: 'YYS202600127',
-    nama_wali: 'Hj. Siti Rohmah',
-    kontak_wali: '081555666777',
-    alamat: 'Jl. Dhoho No. 22, Kediri',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-  {
-    id: 'd0000000-0000-0000-0000-000000000006',
-    id_yys: 'YYS202600128',
-    nama: 'Fatimah Zahra Al-Munawwaroh',
-    nis: 'NIS2026006',
-    jenis_kelamin: 'P',
-    kelas_id: 'b0000000-0000-0000-0000-000000000002',
-    kamar: 'Khadijah 2',
-    kamar_id: 'a0000000-0000-0000-0000-000000000005',
-    kelas_madin: 'Ula 2',
-    rayon: 'Ula 2',
-    status_santri: 'Sakit',
-    barcode_value: 'YYS202600128',
-    nama_wali: 'H. Moch. Yahya',
-    kontak_wali: '081777888999',
-    alamat: 'Cukir Gang 3 No. 10, Jombang',
-    created_at: new Date().toISOString(),
-    updated_at: new Date().toISOString(),
-  },
-];
+export const INITIAL_SANTRI: Santri[] = [];
+
+export const DUMMY_KAMAR_NAMES = new Set([
+  'abu bakar 1',
+  'abu bakar 2',
+  'al-ghazali 01',
+  'al-ghazali 02',
+  'ibnu sina 01',
+  'fathimah 01',
+  'aisyah 01',
+  'utsman 1',
+  'khadijah 1',
+  'khadijah 2',
+]);
+
+export function isDummyKamar(id?: string | null, name?: string | null): boolean {
+  if (id && typeof id === 'string' && id.toLowerCase().startsWith('a0000000-')) return true;
+  if (name && typeof name === 'string' && DUMMY_KAMAR_NAMES.has(name.trim().toLowerCase())) return true;
+  return false;
+}
+
+/**
+ * Pembersihan tuntas akun & data dummy/uji coba dari memori dan Supabase database
+ */
+export async function cleanupAllDummyData(userEmail?: string): Promise<{
+  success: boolean;
+  deletedSantri: number;
+  deletedKamar: number;
+  deletedPermissions: number;
+  message: string;
+}> {
+  let deletedSantri = 0;
+  let deletedKamar = 0;
+  let deletedPermissions = 0;
+
+  // 1. Bersihkan dari memori runtime
+  memorySantri = memorySantri.filter(
+    (s) =>
+      !s.id.startsWith('d0000000-') &&
+      !s.id_yys.startsWith('YYS20260012') &&
+      ![
+        'Muhammad Farhan Al-Ghifari',
+        'Ahmad Dani Ramadhan',
+        'Nabil Fikri Robbani',
+        'Zayyan Arka Pratama',
+        'Aisyah Putri Humaira',
+        'Fatimah Zahra Al-Munawwaroh',
+      ].includes(s.nama)
+  );
+
+  memoryKamar = memoryKamar.filter((k) => !isDummyKamar(k.id, k.nama_kamar));
+
+  // 2. Bersihkan dari database Supabase jika aktif
+  if (isSupabaseConfigured()) {
+    try {
+      // Hapus izin dummy
+      const { data: delPerms } = await supabase
+        .from('permissions')
+        .delete()
+        .or('id.ilike.e0000000-%,dibuat_oleh.eq.pengurus.asrama@pesantren.id')
+        .select('id');
+      if (delPerms) deletedPermissions = delPerms.length;
+
+      // Hapus absensi dummy
+      await supabase
+        .from('attendance')
+        .delete()
+        .or('santri_id.ilike.d0000000-%');
+
+      // Hapus santri dummy
+      const { data: delSantri } = await supabase
+        .from('santri')
+        .delete()
+        .or('id.ilike.d0000000-%,id_yys.ilike.YYS20260012%,nis.in.("NIS2026001","NIS2026002","NIS2026003","NIS2026004","NIS2026005","NIS2026006"),nama.in.("Muhammad Farhan Al-Ghifari","Ahmad Dani Ramadhan","Nabil Fikri Robbani","Zayyan Arka Pratama","Aisyah Putri Humaira","Fatimah Zahra Al-Munawwaroh")')
+        .select('id');
+      if (delSantri) deletedSantri = delSantri.length;
+
+      // Hapus kamar dummy
+      const { data: delKamars } = await supabase
+        .from('kamar')
+        .delete()
+        .or('id.ilike.a0000000-%,nama_kamar.in.("Al-Ghazali 01","Al-Ghazali 02","Ibnu Sina 01","Fathimah 01","Aisyah 01","Abu Bakar 1","Abu Bakar 2","Utsman 1","Khadijah 1","Khadijah 2")')
+        .select('id');
+      if (delKamars) deletedKamar = delKamars.length;
+
+      // Null-kan kamar_id santri jika mengarah ke ID dummy
+      await supabase
+        .from('santri')
+        .update({ kamar_id: null })
+        .or('kamar_id.ilike.a0000000-%');
+
+      await logAudit({
+        action: 'CLEANUP_DUMMY_DATA',
+        tableName: 'all',
+        userEmail,
+        details: { deletedSantri, deletedKamar, deletedPermissions },
+      });
+    } catch (err: any) {
+      console.warn('Gagal membersihkan data dummy di Supabase:', err);
+    }
+  }
+
+  return {
+    success: true,
+    deletedSantri,
+    deletedKamar,
+    deletedPermissions,
+    message: `Pembersihan berhasil. Dihapus: ${deletedSantri} santri dummy, ${deletedKamar} kamar dummy, ${deletedPermissions} perizinan dummy.`,
+  };
+}
 
 // Fallback runtime memory cache
 let memorySantri: Santri[] = [...INITIAL_SANTRI];
@@ -897,27 +885,31 @@ export async function getKamarList(): Promise<Kamar[]> {
         masterKamars.forEach((km: any) => {
           if (km.nama_kamar && typeof km.nama_kamar === 'string' && km.nama_kamar.trim()) {
             const clean = km.nama_kamar.trim();
-            roomMap.set(clean.toLowerCase(), {
-              id: km.id || clean,
-              nama_kamar: clean,
-              gedung: km.gedung || 'Asrama Pondok',
-              kapasitas: km.kapasitas || 20,
-            });
+            // Abaikan kamar dummy / uji coba bawaan
+            if (!isDummyKamar(km.id, clean)) {
+              roomMap.set(clean.toLowerCase(), {
+                id: km.id || clean,
+                nama_kamar: clean,
+                gedung: km.gedung || 'Asrama Pondok',
+                kapasitas: km.kapasitas || 20,
+              });
+            }
           }
         });
       }
 
-      // 2. Ambil juga dari kolom kamar langsung tabel santri
+      // 2. Ambil juga dari kolom kamar langsung tabel santri aktif
       const { data: santriKamars } = await supabase
         .from('santri')
-        .select('kamar')
+        .select('kamar, id')
         .not('kamar', 'is', null);
 
       if (santriKamars && santriKamars.length > 0) {
         santriKamars.forEach((r: any) => {
+          if (r.id && r.id.startsWith('d0000000-')) return;
           if (r.kamar && typeof r.kamar === 'string' && r.kamar.trim()) {
             const clean = r.kamar.trim();
-            if (!roomMap.has(clean.toLowerCase())) {
+            if (!isDummyKamar(null, clean) && !roomMap.has(clean.toLowerCase())) {
               roomMap.set(clean.toLowerCase(), {
                 id: clean,
                 nama_kamar: clean,
@@ -933,9 +925,9 @@ export async function getKamarList(): Promise<Kamar[]> {
     }
   }
 
-  // 3. Tambahkan juga dari memori/in-memory kamar & santri
+  // 3. Tambahkan juga dari memori jika ada (hanya yang bukan dummy)
   memoryKamar.forEach((km) => {
-    if (km.nama_kamar && km.nama_kamar.trim()) {
+    if (km.nama_kamar && km.nama_kamar.trim() && !isDummyKamar(km.id, km.nama_kamar)) {
       const clean = km.nama_kamar.trim();
       if (!roomMap.has(clean.toLowerCase())) {
         roomMap.set(clean.toLowerCase(), {
@@ -948,28 +940,9 @@ export async function getKamarList(): Promise<Kamar[]> {
     }
   });
 
-  memorySantri.forEach((s) => {
-    const km = typeof s.kamar === 'string' ? s.kamar : (s.kamar as any)?.nama_kamar;
-    if (km && km.trim()) {
-      const clean = km.trim();
-      if (!roomMap.has(clean.toLowerCase())) {
-        roomMap.set(clean.toLowerCase(), {
-          id: clean,
-          nama_kamar: clean,
-          gedung: 'Asrama Pondok',
-          kapasitas: 20,
-        });
-      }
-    }
-  });
-
-  if (roomMap.size > 0) {
-    return Array.from(roomMap.values()).sort((a, b) =>
-      a.nama_kamar.localeCompare(b.nama_kamar, undefined, { numeric: true, sensitivity: 'base' })
-    );
-  }
-
-  return memoryKamar;
+  return Array.from(roomMap.values()).sort((a, b) =>
+    a.nama_kamar.localeCompare(b.nama_kamar, undefined, { numeric: true, sensitivity: 'base' })
+  );
 }
 
 /**
@@ -1240,6 +1213,112 @@ export async function createKegiatan(
     details: newKegiatan as unknown as Record<string, unknown>,
   });
   return { success: true, data: newKegiatan };
+}
+
+/**
+ * Update data kegiatan
+ */
+export async function updateKegiatan(
+  id: string,
+  updates: Partial<Kegiatan>,
+  userEmail?: string
+): Promise<{ success: boolean; data?: Kegiatan; error?: string }> {
+  const updatedPayload: Record<string, unknown> = {
+    ...updates,
+    updated_at: new Date().toISOString(),
+  };
+
+  if (isSupabaseConfigured()) {
+    try {
+      const { data, error } = await supabase
+        .from('kegiatan')
+        .update(updatedPayload)
+        .eq('id', id)
+        .select()
+        .single();
+
+      if (!error && data) {
+        const idx = memoryKegiatan.findIndex((k) => k.id === id);
+        if (idx !== -1) {
+          memoryKegiatan[idx] = { ...memoryKegiatan[idx], ...(data as Kegiatan) };
+        }
+        await logAudit({
+          action: 'UPDATE_KEGIATAN',
+          tableName: 'kegiatan',
+          recordId: id,
+          userEmail,
+          details: data,
+        });
+        return { success: true, data: data as Kegiatan };
+      } else if (error) {
+        return { success: false, error: error.message };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  // Memory fallback
+  const idx = memoryKegiatan.findIndex((k) => k.id === id);
+  if (idx !== -1) {
+    memoryKegiatan[idx] = { ...memoryKegiatan[idx], ...updatedPayload } as Kegiatan;
+    await logAudit({
+      action: 'UPDATE_KEGIATAN',
+      tableName: 'kegiatan',
+      recordId: id,
+      userEmail,
+      details: memoryKegiatan[idx] as unknown as Record<string, unknown>,
+    });
+    return { success: true, data: memoryKegiatan[idx] };
+  }
+
+  return { success: false, error: 'Kegiatan tidak ditemukan.' };
+}
+
+/**
+ * Hapus kegiatan
+ */
+export async function deleteKegiatan(
+  id: string,
+  userEmail?: string
+): Promise<{ success: boolean; error?: string }> {
+  if (isSupabaseConfigured()) {
+    try {
+      // Hapus data absensi terkait terlebih dahulu agar tidak kena foreign key constraint
+      await supabase.from('attendance').delete().eq('kegiatan_id', id);
+
+      const { error } = await supabase.from('kegiatan').delete().eq('id', id);
+      if (error) {
+        return { success: false, error: error.message };
+      }
+    } catch (err: any) {
+      return { success: false, error: err.message };
+    }
+  }
+
+  const existing = memoryKegiatan.find((k) => k.id === id);
+  memoryKegiatan = memoryKegiatan.filter((k) => k.id !== id);
+
+  await logAudit({
+    action: 'DELETE_KEGIATAN',
+    tableName: 'kegiatan',
+    recordId: id,
+    userEmail,
+    details: existing as unknown as Record<string, unknown>,
+  });
+
+  return { success: true };
+}
+
+/**
+ * Toggle status aktif/nonaktif kegiatan
+ */
+export async function toggleKegiatanStatus(
+  id: string,
+  is_active: boolean,
+  userEmail?: string
+): Promise<{ success: boolean; data?: Kegiatan; error?: string }> {
+  return updateKegiatan(id, { is_active }, userEmail);
 }
 
 

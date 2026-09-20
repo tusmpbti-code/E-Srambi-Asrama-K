@@ -195,7 +195,7 @@ CREATE TABLE IF NOT EXISTS public.special_events (
     lokasi VARCHAR(255) NOT NULL,
     keterangan TEXT,
     jenis_absensi VARCHAR(50) NOT NULL DEFAULT 'BERANGKAT_KEMBALI'
-        CHECK (jenis_absensi IN ('SEKALI', 'BERANGKAT_KEMBALI', 'CHECKIN_CHECKOUT')),
+        CHECK (jenis_absensi IN ('SEKALI', 'BERANGKAT_KEMBALI', 'CHECKIN_CHECKOUT', 'BERANGKAT_KEMBALI_HARIAN', 'BERANGKAT_KEMBALI_MENGINAP')),
     jam_batas_berangkat TIME DEFAULT '08:00',
     jam_batas_kembali TIME DEFAULT '17:00',
     status VARCHAR(50) NOT NULL DEFAULT 'AKTIF'

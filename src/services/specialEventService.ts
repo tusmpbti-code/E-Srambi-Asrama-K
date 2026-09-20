@@ -155,6 +155,58 @@ let memoryAttendance: SpecialAttendanceRecord[] = [...INITIAL_ATTENDANCE];
 // CRUD SPECIAL EVENTS
 // ==============================================================================
 
+/**
+ * Menormalkan nilai enum frontend ke constraint tabel Supabase:
+ * CHECK (jenis_absensi IN ('SEKALI', 'BERANGKAT_KEMBALI', 'CHECKIN_CHECKOUT'))
+ */
+export function toDbJenisAbsensi(type?: string): 'SEKALI' | 'BERANGKAT_KEMBALI' | 'CHECKIN_CHECKOUT' {
+  if (!type) return 'BERANGKAT_KEMBALI';
+  if (type === 'SEKALI') return 'SEKALI';
+  if (type === 'BERANGKAT_KEMBALI_HARIAN' || type === 'CHECKIN_CHECKOUT') {
+    return 'CHECKIN_CHECKOUT';
+  }
+  return 'BERANGKAT_KEMBALI';
+}
+
+/**
+ * Memetakan rekaman database ke model SpecialEvent frontend secara lengkap
+ */
+export function formatSpecialEventFromDb(row: any): SpecialEvent {
+  if (!row) return row;
+  const isHarian =
+    row.jenis_absensi === 'CHECKIN_CHECKOUT' ||
+    row.jenis_absensi === 'BERANGKAT_KEMBALI_HARIAN';
+  const isSekali = row.jenis_absensi === 'SEKALI';
+  const isMenginap =
+    row.is_menginap !== undefined
+      ? Boolean(row.is_menginap)
+      : !isHarian && !isSekali;
+
+  let frontendJenis: SpecialEventAttendanceType = 'BERANGKAT_KEMBALI_MENGINAP';
+  if (isSekali) {
+    frontendJenis = 'SEKALI';
+  } else if (isHarian) {
+    frontendJenis = 'BERANGKAT_KEMBALI_HARIAN';
+  }
+
+  let durasiMalam = row.durasi_malam;
+  if (durasiMalam === undefined && isMenginap && row.tanggal_mulai && row.tanggal_selesai) {
+    const start = new Date(row.tanggal_mulai);
+    const end = new Date(row.tanggal_selesai);
+    const diffTime = end.getTime() - start.getTime();
+    durasiMalam = Math.max(1, Math.ceil(diffTime / (1000 * 60 * 60 * 24)));
+  }
+
+  return {
+    ...row,
+    jenis_absensi: frontendJenis,
+    is_menginap: isMenginap,
+    durasi_malam: isMenginap ? (durasiMalam || 1) : 0,
+    jam_berangkat: row.jam_berangkat || row.jam_batas_berangkat || null,
+    jam_kembali: row.jam_kembali || row.jam_batas_kembali || null,
+  };
+}
+
 export async function getSpecialEvents(filter?: {
   status?: SpecialEventStatus;
   jenis?: string;
@@ -183,7 +235,7 @@ export async function getSpecialEvents(filter?: {
       const { data, error } = await query;
       if (!error && data) {
         return data.map((ev: any) => ({
-          ...ev,
+          ...formatSpecialEventFromDb(ev),
           peserta_count: ev.participants?.[0]?.count || 0,
         }));
       }
@@ -225,7 +277,7 @@ export async function getSpecialEventById(id: string): Promise<SpecialEvent | nu
         .select('*')
         .eq('id', id)
         .single();
-      if (!error && data) return data as SpecialEvent;
+      if (!error && data) return formatSpecialEventFromDb(data);
     } catch {
       // fallback
     }
@@ -239,22 +291,22 @@ export async function createSpecialEvent(
 ): Promise<{ data: SpecialEvent | null; error: string | null }> {
   if (isSupabaseConfigured()) {
     try {
+      const dbPayload = {
+        nama_kegiatan: eventInput.nama_kegiatan.trim(),
+        jenis_kegiatan: eventInput.jenis_kegiatan,
+        tanggal_mulai: eventInput.tanggal_mulai,
+        tanggal_selesai: eventInput.tanggal_selesai,
+        lokasi: eventInput.lokasi.trim(),
+        keterangan: eventInput.keterangan?.trim() || null,
+        jenis_absensi: toDbJenisAbsensi(eventInput.jenis_absensi),
+        jam_batas_berangkat: eventInput.jam_batas_berangkat || eventInput.jam_berangkat || null,
+        jam_batas_kembali: eventInput.jam_batas_kembali || eventInput.jam_kembali || null,
+        status: eventInput.status || 'AKTIF',
+      };
+
       const { data: evData, error: evError } = await supabase
         .from('special_events')
-        .insert([
-          {
-            nama_kegiatan: eventInput.nama_kegiatan.trim(),
-            jenis_kegiatan: eventInput.jenis_kegiatan,
-            tanggal_mulai: eventInput.tanggal_mulai,
-            tanggal_selesai: eventInput.tanggal_selesai,
-            lokasi: eventInput.lokasi.trim(),
-            keterangan: eventInput.keterangan?.trim() || null,
-            jenis_absensi: eventInput.jenis_absensi,
-            jam_batas_berangkat: eventInput.jam_batas_berangkat || eventInput.jam_berangkat || null,
-            jam_batas_kembali: eventInput.jam_batas_kembali || eventInput.jam_kembali || null,
-            status: eventInput.status || 'AKTIF',
-          },
-        ])
+        .insert([dbPayload])
         .select('*')
         .single();
 
@@ -279,7 +331,15 @@ export async function createSpecialEvent(
         details: { nama: evData.nama_kegiatan, jenis: evData.jenis_kegiatan },
       });
 
-      return { data: evData as SpecialEvent, error: null };
+      const formatted = formatSpecialEventFromDb({
+        ...evData,
+        is_menginap: eventInput.is_menginap,
+        durasi_malam: eventInput.durasi_malam,
+        jam_berangkat: eventInput.jam_berangkat,
+        jam_kembali: eventInput.jam_kembali,
+      });
+
+      return { data: formatted, error: null };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal membuat kegiatan khusus';
       return { data: null, error: msg };
@@ -319,18 +379,25 @@ export async function updateSpecialEvent(
 ): Promise<{ data: SpecialEvent | null; error: string | null }> {
   if (isSupabaseConfigured()) {
     try {
+      const dbUpdates: any = {
+        ...updates,
+        updated_at: new Date().toISOString(),
+      };
+      if (dbUpdates.jenis_absensi) {
+        dbUpdates.jenis_absensi = toDbJenisAbsensi(dbUpdates.jenis_absensi);
+      }
+      delete dbUpdates.peserta_count;
+      delete dbUpdates.participants;
+
       const { data, error } = await supabase
         .from('special_events')
-        .update({
-          ...updates,
-          updated_at: new Date().toISOString(),
-        })
+        .update(dbUpdates)
         .eq('id', id)
         .select('*')
         .single();
 
       if (error) return { data: null, error: error.message };
-      return { data: data as SpecialEvent, error: null };
+      return { data: formatSpecialEventFromDb(data), error: null };
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : 'Gagal memperbarui kegiatan';
       return { data: null, error: msg };

@@ -18,7 +18,8 @@ export const KegiatanKhususView: React.FC = () => {
   const canManage = ['SUPER_ADMIN', 'ADMIN', 'PENGURUS_ASRAMA'].includes(currentRole);
 
   const [events, setEvents] = useState<SpecialEvent[]>([]);
-  const [selectedEvent, setSelectedEvent] = useState<SpecialEvent | null>(null);
+  const [selectedEventId, setSelectedEventId] = useState<string | null>(null);
+  const [selectedEventFallback, setSelectedEventFallback] = useState<SpecialEvent | null>(null);
   const [santriList, setSantriList] = useState<Santri[]>([]);
   const [kelasList, setKelasList] = useState<Kelas[]>([]);
   const [kamarList, setKamarList] = useState<Kamar[]>([]);
@@ -27,7 +28,6 @@ export const KegiatanKhususView: React.FC = () => {
 
   // Fetch all events & master data
   const loadData = useCallback(async () => {
-    setLoading(true);
     try {
       const [eventsData, santriData, klsData, kmrData] = await Promise.all([
         getSpecialEvents(),
@@ -39,22 +39,21 @@ export const KegiatanKhususView: React.FC = () => {
       setSantriList(santriData);
       setKelasList(klsData);
       setKamarList(kmrData);
-
-      // If an event is currently selected, refresh its reference
-      if (selectedEvent) {
-        const updated = eventsData.find((e) => e.id === selectedEvent.id);
-        if (updated) setSelectedEvent(updated);
-      }
     } catch (err) {
       console.error('Error loading kegiatan khusus data:', err);
     } finally {
       setLoading(false);
     }
-  }, [selectedEvent]);
+  }, []);
 
   useEffect(() => {
     loadData();
-  }, []); // Run once on mount
+  }, [loadData]);
+
+  // Selected event resolved from events or fallback
+  const selectedEvent = selectedEventId
+    ? events.find((e) => e.id === selectedEventId) || selectedEventFallback
+    : null;
 
   // Delete event handler
   const handleDeleteEvent = async (id: string) => {
@@ -67,8 +66,9 @@ export const KegiatanKhususView: React.FC = () => {
     try {
       const res = await deleteSpecialEvent(id);
       if (res.success) {
-        if (selectedEvent?.id === id) {
-          setSelectedEvent(null);
+        if (selectedEventId === id) {
+          setSelectedEventId(null);
+          setSelectedEventFallback(null);
         }
         await loadData();
       } else {
@@ -77,6 +77,17 @@ export const KegiatanKhususView: React.FC = () => {
     } catch (err) {
       console.error('Error deleting event:', err);
     }
+  };
+
+  const handleSelectEvent = (ev: SpecialEvent) => {
+    setSelectedEventId(ev.id);
+    setSelectedEventFallback(ev);
+  };
+
+  const handleBack = () => {
+    setSelectedEventId(null);
+    setSelectedEventFallback(null);
+    loadData();
   };
 
   if (loading && events.length === 0) {
@@ -95,10 +106,7 @@ export const KegiatanKhususView: React.FC = () => {
       {selectedEvent ? (
         <SpecialEventDetailView
           event={selectedEvent}
-          onBack={() => {
-            setSelectedEvent(null);
-            loadData();
-          }}
+          onBack={handleBack}
           santriList={santriList}
           kelasList={kelasList}
           kamarList={kamarList}
@@ -107,7 +115,7 @@ export const KegiatanKhususView: React.FC = () => {
       ) : (
         <SpecialEventList
           events={events}
-          onSelectEvent={(ev) => setSelectedEvent(ev)}
+          onSelectEvent={handleSelectEvent}
           onOpenCreateModal={() => setShowCreateModal(true)}
           onDeleteEvent={handleDeleteEvent}
           canManage={canManage}

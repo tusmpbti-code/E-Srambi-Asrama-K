@@ -42,6 +42,8 @@ import {
   getKamarList,
   getKelasList,
   getKelasMadinList,
+  cleanupAllDummyData,
+  isDummyKamar,
 } from '../services/santriService';
 import { useAuth } from '../context/AuthContext';
 import { hasPermission } from '../lib/roles';
@@ -52,7 +54,7 @@ interface SantriViewProps {
 }
 
 export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) => {
-  const { currentRole } = useAuth();
+  const { currentRole, profile } = useAuth();
 
   const canEdit = hasPermission(currentRole, 'edit_santri');
   const canDelete = hasPermission(currentRole, 'delete_santri');
@@ -134,22 +136,32 @@ export const SantriView: React.FC<SantriViewProps> = ({ onOpenBarcodeModal }) =>
   };
 
   useEffect(() => {
+    // Bersihkan sisa data dummy / uji coba bawaan saat startup
+    cleanupAllDummyData(profile?.email).then((res) => {
+      if (res.deletedSantri > 0 || res.deletedKamar > 0 || res.deletedPermissions > 0) {
+        fetchData();
+      }
+    });
+  }, []);
+
+  useEffect(() => {
     fetchData();
   }, [searchQuery, selectedKelas, selectedKamar, selectedMadin, selectedStatus, selectedGender]);
 
   // Kumpulan kamar unik dari santri master (termasuk hasil import Excel) & master kamar
   const availableKamars = useMemo(() => {
     const map = new Map<string, string>();
-    // 1. Dari master kamar bawaan
+    // 1. Dari master kamar aktif (kecualikan dummy)
     kamarList.forEach((k) => {
-      if (k.nama_kamar && k.nama_kamar.trim()) {
+      if (k.nama_kamar && k.nama_kamar.trim() && !isDummyKamar(k.id, k.nama_kamar)) {
         map.set(k.nama_kamar.trim().toLowerCase(), k.nama_kamar.trim());
       }
     });
-    // 2. Dari data santri master (termasuk data yang diimport pengguna)
+    // 2. Dari data santri master asli (termasuk data yang diimport pengguna)
     allMasterSantri.forEach((s) => {
+      if (s.id && s.id.startsWith('d0000000-')) return;
       const kText = getSantriKamarText(s);
-      if (kText && kText !== '-' && kText.trim()) {
+      if (kText && kText !== '-' && kText.trim() && !isDummyKamar(null, kText)) {
         map.set(kText.trim().toLowerCase(), kText.trim());
       }
     });

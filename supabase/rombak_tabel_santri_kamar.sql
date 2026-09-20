@@ -81,3 +81,10 @@ CREATE TRIGGER trg_sync_santri_kamar
 -- 8. Pastikan hak akses penuh terbuka untuk operasional santri & kamar
 GRANT ALL ON public.santri TO anon, authenticated;
 GRANT ALL ON public.kamar TO anon, authenticated;
+
+-- 9. Perbaikan Constraint jenis_absensi Kegiatan Khusus
+ALTER TABLE public.special_events DROP CONSTRAINT IF EXISTS special_events_jenis_absensi_check;
+ALTER TABLE public.special_events ADD CONSTRAINT special_events_jenis_absensi_check
+    CHECK (jenis_absensi IN ('SEKALI', 'BERANGKAT_KEMBALI', 'CHECKIN_CHECKOUT', 'BERANGKAT_KEMBALI_HARIAN', 'BERANGKAT_KEMBALI_MENGINAP'));
+GRANT ALL ON public.special_events TO anon, authenticated;
+

@@ -105,7 +105,13 @@ CREATE TRIGGER trg_sync_santri_kamar
 
 -- 7. Pastikan hak akses penuh terbuka
 GRANT ALL ON public.santri TO anon, authenticated;
-GRANT ALL ON public.kamar TO anon, authenticated;`;
+GRANT ALL ON public.kamar TO anon, authenticated;
+
+-- 8. Perbaikan Constraint Kegiatan Khusus
+ALTER TABLE public.special_events DROP CONSTRAINT IF EXISTS special_events_jenis_absensi_check;
+ALTER TABLE public.special_events ADD CONSTRAINT special_events_jenis_absensi_check
+    CHECK (jenis_absensi IN ('SEKALI', 'BERANGKAT_KEMBALI', 'CHECKIN_CHECKOUT', 'BERANGKAT_KEMBALI_HARIAN', 'BERANGKAT_KEMBALI_MENGINAP'));
+GRANT ALL ON public.special_events TO anon, authenticated;`;
 
   return (
     <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xs flex items-center justify-center p-4">

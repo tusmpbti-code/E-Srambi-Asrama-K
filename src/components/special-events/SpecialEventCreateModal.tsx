@@ -347,7 +347,7 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
                   <div>
                     <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-purple-600" />
-                      Jam Berangkat <span className="text-rose-500">*</span>
+                      <span>{isMenginap ? 'Jam Berangkat' : 'Jam Berangkat'} <span className="text-rose-500">*</span></span>
                     </label>
                     <input
                       type="time"
@@ -356,14 +356,16 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
                       onChange={(e) => setJamBerangkat(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-purple-300 text-xs bg-white text-slate-800 font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
                     />
-                    <p className="text-[10px] text-purple-700 mt-1">
-                      Waktu santri/rombongan berangkat dari pondok pada <strong>{tanggalMulai}</strong>.
-                    </p>
+                    {isMenginap && (
+                      <p className="text-[10px] text-purple-700 mt-1">
+                        Waktu santri/rombongan berangkat dari pondok pada <strong>{tanggalMulai}</strong>.
+                      </p>
+                    )}
                   </div>
                   <div>
                     <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center gap-1.5">
                       <Clock className="w-3.5 h-3.5 text-purple-600" />
-                      Jam Kembali ke Pondok <span className="text-rose-500">*</span>
+                      <span>{isMenginap ? 'Jam Kembali ke Pondok' : 'Jam Kembali ke Pondok'} <span className="text-rose-500">*</span></span>
                     </label>
                     <input
                       type="time"
@@ -372,9 +374,11 @@ export const SpecialEventCreateModal: React.FC<SpecialEventCreateModalProps> = (
                       onChange={(e) => setJamKembali(e.target.value)}
                       className="w-full px-3 py-2 rounded-lg border border-purple-300 text-xs bg-white text-slate-800 font-semibold focus:ring-2 focus:ring-purple-500 focus:outline-hidden"
                     />
-                    <p className="text-[10px] text-purple-700 mt-1">
-                      Estimasi santri tiba kembali di pondok pada <strong>{tanggalSelesai}</strong>.
-                    </p>
+                    {isMenginap && (
+                      <p className="text-[10px] text-purple-700 mt-1">
+                        Estimasi santri tiba kembali di pondok pada <strong>{tanggalSelesai}</strong>.
+                      </p>
+                    )}
                   </div>
                 </div>
               </div>
